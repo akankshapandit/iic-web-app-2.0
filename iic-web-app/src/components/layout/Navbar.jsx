@@ -1,0 +1,74 @@
+import React from "react";
+import { Link } from "react-router-dom";
+
+function Navbar() {
+  return (
+    <nav className="bg-white shadow-md px-6 py-3 flex items-center justify-between">
+
+      {/* LEFT LOGO */}
+      <div className="text-xl font-bold text-blue-700 ml-2">
+        <Link to="/">CMRIT IIC</Link>
+      </div>
+
+      {/* CENTER NAV LINKS */}
+      <div className="flex items-center gap-6 text-gray-700 font-medium ml-6 text-sm lg:text-base">
+
+        <Link to="/" className="hover:text-blue-600 transition whitespace-nowrap">Home</Link>
+        <Link to="/ie-cell" className="hover:text-blue-600 transition whitespace-nowrap">I&E Cell</Link>
+        
+        {/* ADDED: Final Auditor Link */}
+        <Link to="/final-audit" className="text-blue-600 font-bold hover:text-blue-800 transition whitespace-nowrap">
+          🔍 Report Auditor
+        </Link>
+
+        <Link to="/patents" className="hover:text-blue-600 transition whitespace-nowrap">Patents</Link>
+        {/* STARTUPS DROPDOWN */}
+        <div className="relative group py-2">
+          <button className="hover:text-blue-600 transition whitespace-nowrap flex items-center gap-1">
+            Startups
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+          </button>
+          <div className="absolute top-[100%] left-0 hidden group-hover:flex flex-col bg-white shadow-xl rounded-lg border border-gray-100 w-48 overflow-hidden z-50">
+            <Link to="/startups" className="px-4 py-3 hover:bg-blue-50 hover:text-blue-600 text-sm font-medium transition border-b border-gray-50">Student Startups</Link>
+            <Link to="/faculty-startups" className="px-4 py-3 hover:bg-blue-50 hover:text-blue-600 text-sm font-medium transition">Faculty Startups</Link>
+          </div>
+        </div>
+
+        <Link to="/achievements" className="hover:text-blue-600 transition whitespace-nowrap">Achievements</Link>
+        <Link to="/events/calendar" className="hover:text-blue-600 transition whitespace-nowrap">Events</Link>
+        <Link to="/incubation" className="hover:text-blue-600 transition whitespace-nowrap">Incubation</Link>
+        <Link to="/events/archive" className="hover:text-blue-600 transition whitespace-nowrap">Archive</Link>
+
+      </div>
+
+      {/* RIGHT SIDE BUTTONS */}
+      <div className="flex items-center gap-3">
+
+        {/* REPORT GENERATOR BUTTON */}
+        <Link to="/generate-report">
+          <button className="bg-purple-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-purple-700 transition flex items-center gap-2 whitespace-nowrap">
+            🤖 AI Generator
+          </button>
+        </Link>
+
+        {/* LOGIN */}
+        <Link to="/login">
+          <button className="border px-3 py-1.5 text-sm rounded-lg hover:bg-gray-100 transition whitespace-nowrap">
+            Login
+          </button>
+        </Link>
+
+        {/* SIGNUP */}
+        <Link to="/signup">
+          <button className="bg-blue-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-blue-700 transition whitespace-nowrap">
+            Sign Up
+          </button>
+        </Link>
+
+      </div>
+
+    </nav>
+  );
+}
+
+export default Navbar;
