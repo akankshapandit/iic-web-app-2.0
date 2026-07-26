@@ -14,8 +14,12 @@ import Incubation from "../pages/Incubation/Incubation";
 import EventCalendar from "../pages/Events/EventCalendar";
 import EventArchive from "../pages/Events/EventArchive";
 import IPRCell from "../pages/IPRCell/IPRCell";
+import IPRActivities from "../pages/IPRCell/IPRActivities";
+import IPRCellMembers from "../pages/IPRCell/IPRCellMembers";
 import StudentStartUps from "../pages/Startups/StudentStartUps";
 import FacultyStartups from "../pages/Startups/FacultyStartups";
+import Members from "../pages/Members/Members";
+import KSCSTIPCellReport from "../pages/IPRCell/KSCSTIPCellReport";
 
 function AppRoutes() {
   return (
@@ -36,6 +40,10 @@ function AppRoutes() {
       <Route path="/patents" element={<IPRCell />} />
       <Route path="/startups" element={<StudentStartUps />} />
       <Route path="/faculty-startups" element={<FacultyStartups />} />
+      <Route path="/members" element={<Members />} />
+      <Route path="/ipr-members" element={<IPRCellMembers />} />
+      <Route path="/ipr-reports" element={<KSCSTIPCellReport />} />
+      <Route path="/ipr-activities" element={<IPRActivities />} />
     </Routes>
   );
 }
