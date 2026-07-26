@@ -38,6 +38,8 @@ function Navbar() {
         <Link to="/events/calendar" className="hover:text-blue-600 transition whitespace-nowrap">Events</Link>
         <Link to="/incubation" className="hover:text-blue-600 transition whitespace-nowrap">Incubation</Link>
         <Link to="/events/archive" className="hover:text-blue-600 transition whitespace-nowrap">Archive</Link>
+        <Link to="/members" className="hover:text-blue-600 transition whitespace-nowrap">Members</Link>
+
 
       </div>
 
@@ -64,6 +66,8 @@ function Navbar() {
             Sign Up
           </button>
         </Link>
+
+        
 
       </div>
 
