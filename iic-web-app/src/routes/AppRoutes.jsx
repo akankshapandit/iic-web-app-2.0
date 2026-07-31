@@ -21,6 +21,7 @@ import Members from "../pages/Members/Members";
 import KSCSTIPCellReport from "../pages/IPRCell/KSCSTIPCellReport";
 import DepartmentLogin from "../pages/IECell/DepartmentLogin";
 import DepartmentDashboard from "../pages/IECell/DepartmentDashboard";
+import IECellHome from "../pages/IECell/IECellHome";
 function AppRoutes() {
   return (
     <Routes>
@@ -43,7 +44,8 @@ function AppRoutes() {
       <Route path="/ipr-members" element={<IPRCellMembers />} />
       <Route path="/ipr-reports" element={<KSCSTIPCellReport />} />
       <Route path="/ipr-activities" element={<IPRActivities />} />
-      <Route path="/ie-cell" element={<DepartmentLogin />} />
+      <Route path="/ie-cell" element={<IECellHome />} />
+      <Route path="/ie-cell/login" element={<DepartmentLogin />} />
       <Route path="/department-dashboard" element={<DepartmentDashboard />} />
     </Routes>
   );
