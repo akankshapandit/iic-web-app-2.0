@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 
 function Navbar() {
+
+    const [showIECellMenu, setShowIECellMenu] = useState(false);
   return (
     <nav className="bg-white shadow-md px-6 py-3 flex items-center justify-between">
 
@@ -14,7 +16,86 @@ function Navbar() {
       <div className="flex items-center gap-6 text-gray-700 font-medium ml-6 text-sm lg:text-base">
 
         <Link to="/" className="hover:text-blue-600 transition whitespace-nowrap">Home</Link>
-        <Link to="/ie-cell" className="hover:text-blue-600 transition whitespace-nowrap">I&E Cell</Link>
+        {/* I&E CELL DROPDOWN */}
+
+<div
+  className="relative py-2"
+  onMouseEnter={() => setShowIECellMenu(true)}
+  onMouseLeave={() => setShowIECellMenu(false)}
+>
+
+  {/* Main I&E Cell Link */}
+
+  <Link
+    to="/ie-cell"
+    className="
+      hover:text-blue-600 
+      transition 
+      whitespace-nowrap
+      flex
+      items-center
+      gap-1
+    "
+  >
+    I&E Cell
+
+    <svg
+      className="w-4 h-4"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M19 9l-7 7-7-7"
+      />
+    </svg>
+
+  </Link>
+
+
+
+  {/* Dropdown Menu */}
+
+  {showIECellMenu && (
+
+    <div
+      className="
+        absolute
+        top-full
+        left-0
+        bg-white
+        shadow-xl
+        rounded-lg
+        border
+        w-52
+        overflow-hidden
+        z-50
+      "
+    >
+
+      <Link
+        to="/ie-cell/login"
+        className="
+          block
+          px-4
+          py-3
+          hover:bg-blue-50
+          hover:text-blue-600
+          text-sm
+        "
+      >
+        Department Login
+      </Link>
+
+
+    </div>
+
+  )}
+
+</div>
         
         {/* ADDED: Final Auditor Link */}
         <Link to="/final-audit" className="text-blue-600 font-bold hover:text-blue-800 transition whitespace-nowrap">
