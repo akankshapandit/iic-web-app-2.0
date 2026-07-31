@@ -9,7 +9,6 @@ import FinalAuditPage from "../pages/FinalAuditPage";
 
 // New page imports
 import Achievements from "../pages/Achievements/Achievements";
-import IECell from "../pages/IECell/IECell";
 import Incubation from "../pages/Incubation/Incubation";
 import EventCalendar from "../pages/Events/EventCalendar";
 import EventArchive from "../pages/Events/EventArchive";
@@ -20,7 +19,8 @@ import StudentStartUps from "../pages/Startups/StudentStartUps";
 import FacultyStartups from "../pages/Startups/FacultyStartups";
 import Members from "../pages/Members/Members";
 import KSCSTIPCellReport from "../pages/IPRCell/KSCSTIPCellReport";
-
+import DepartmentLogin from "../pages/IECell/DepartmentLogin";
+import DepartmentDashboard from "../pages/IECell/DepartmentDashboard";
 function AppRoutes() {
   return (
     <Routes>
@@ -33,7 +33,6 @@ function AppRoutes() {
 
       {/* New Routes */}
       <Route path="/achievements" element={<Achievements />} />
-      <Route path="/ie-cell" element={<IECell />} />
       <Route path="/incubation" element={<Incubation />} />
       <Route path="/events/calendar" element={<EventCalendar />} />
       <Route path="/events/archive" element={<EventArchive />} />
@@ -44,6 +43,8 @@ function AppRoutes() {
       <Route path="/ipr-members" element={<IPRCellMembers />} />
       <Route path="/ipr-reports" element={<KSCSTIPCellReport />} />
       <Route path="/ipr-activities" element={<IPRActivities />} />
+      <Route path="/ie-cell" element={<DepartmentLogin />} />
+      <Route path="/department-dashboard" element={<DepartmentDashboard />} />
     </Routes>
   );
 }
