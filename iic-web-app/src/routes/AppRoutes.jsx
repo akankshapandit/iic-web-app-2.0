@@ -22,6 +22,7 @@ import KSCSTIPCellReport from "../pages/IPRCell/KSCSTIPCellReport";
 import DepartmentLogin from "../pages/IECell/DepartmentLogin";
 import DepartmentDashboard from "../pages/IECell/DepartmentDashboard";
 import IECellHome from "../pages/IECell/IECellHome";
+import IICDashboard from "../pages/IECell/IICDashboard";
 function AppRoutes() {
   return (
     <Routes>
@@ -47,6 +48,7 @@ function AppRoutes() {
       <Route path="/ie-cell" element={<IECellHome />} />
       <Route path="/ie-cell/login" element={<DepartmentLogin />} />
       <Route path="/department-dashboard" element={<DepartmentDashboard />} />
+      <Route path="/iic-dashboard" element={<IICDashboard />} />
     </Routes>
   );
 }

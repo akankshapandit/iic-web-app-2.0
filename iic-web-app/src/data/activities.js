@@ -98,7 +98,8 @@ export const departmentActivities = {
   CSE: [
     {
       id: 1,
-      title: "Awareness Workshop: Entrepreneurship & Innovation as Career Opportunities",
+      title:
+        "Awareness Workshop: Entrepreneurship & Innovation as Career Opportunities",
       date: "26 Oct 2025",
       coordinator: "Dr. Jayanthi",
       status: "Completed",
@@ -107,7 +108,8 @@ export const departmentActivities = {
     },
     {
       id: 2,
-      title: "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+      title:
+        "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
       date: "18 Dec 2025",
       coordinator: "Prof. Lynsha",
       status: "Completed",
@@ -116,7 +118,8 @@ export const departmentActivities = {
     },
     {
       id: 3,
-      title: "Expert Talk on Technology Readiness Level (TRL), MRL, IRL, IP Commercialization & Tech Transfer",
+      title:
+        "Expert Talk on Technology Readiness Level (TRL), MRL, IRL, IP Commercialization & Tech Transfer",
       date: "5 Feb 2026",
       coordinator: "Prof. Lynsha",
       status: "Completed",
@@ -125,7 +128,8 @@ export const departmentActivities = {
     },
     {
       id: 4,
-      title: "Panel Discussion with Regional/National Startup Ecosystem Enablers",
+      title:
+        "Panel Discussion with Regional/National Startup Ecosystem Enablers",
       date: "11 Jul 2026",
       coordinator: "Dr. Praveen Jadav & Prof. Lynsha",
       status: "Upcoming",
@@ -139,7 +143,8 @@ export const departmentActivities = {
   "Basic Science": [
     {
       id: 1,
-      title: "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+      title:
+        "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
       date: "27 Dec 2025",
       coordinator: "Dr. Naveen Kumar & Dr. Rajesh Gopal",
       status: "Completed",
@@ -148,7 +153,8 @@ export const departmentActivities = {
     },
     {
       id: 2,
-      title: "Inter/Intra Institutional Hackathon / Idea Challenge",
+      title:
+        "Inter/Intra Institutional Hackathon / Idea Challenge",
       date: "8 Oct 2025",
       coordinator: "Mr. Praveen D Jadhav",
       status: "Completed",
@@ -166,7 +172,8 @@ export const departmentActivities = {
     },
     {
       id: 4,
-      title: "Innovation & Entrepreneurship Outreach Program in Schools",
+      title:
+        "Innovation & Entrepreneurship Outreach Program in Schools",
       date: "28 Jan 2026",
       coordinator: "Dr. Meenakshi K",
       status: "Completed",
@@ -175,7 +182,8 @@ export const departmentActivities = {
     },
     {
       id: 5,
-      title: "Field / Exposure Visit to Incubation Units",
+      title:
+        "Field / Exposure Visit to Incubation Units",
       date: "28 Feb 2026",
       coordinator: "Dr. Naveen Kumar & Dr. Rajesh Gopal",
       status: "Completed",
@@ -184,7 +192,8 @@ export const departmentActivities = {
     },
     {
       id: 6,
-      title: "Workshop on Business Model Canvas (BMC) & Business Model Fit",
+      title:
+        "Workshop on Business Model Canvas (BMC) & Business Model Fit",
       date: "6 May 2026",
       coordinator: "Dr. Rajesh Gopal",
       status: "Completed",
@@ -193,7 +202,8 @@ export const departmentActivities = {
     },
     {
       id: 7,
-      title: "Mentoring Event: Demo Day / Poster Presentation of Business Plans",
+      title:
+        "Mentoring Event: Demo Day / Poster Presentation of Business Plans",
       date: "9 May 2026",
       coordinator: "Mr. Praveen D Jadhav",
       status: "Completed",
@@ -202,7 +212,8 @@ export const departmentActivities = {
     },
     {
       id: 8,
-      title: "Innovation & Entrepreneurship Outreach Program in Schools / Community",
+      title:
+        "Innovation & Entrepreneurship Outreach Program in Schools / Community",
       date: "13 Jul 2026",
       coordinator: "Dr. Meenakshi K",
       status: "Upcoming",
@@ -211,7 +222,8 @@ export const departmentActivities = {
     },
     {
       id: 9,
-      title: "Innovation & Entrepreneurship Outreach Program in Schools / Community",
+      title:
+        "Innovation & Entrepreneurship Outreach Program in Schools / Community",
       date: "16 Jul 2026",
       coordinator: "Dr. Rajesh Gopal",
       status: "Upcoming",
@@ -220,7 +232,8 @@ export const departmentActivities = {
     },
     {
       id: 10,
-      title: "Inter/Intra Institutional Start-up Competition & Reward Best Start-ups",
+      title:
+        "Inter/Intra Institutional Start-up Competition & Reward Best Start-ups",
       date: "25 Jul 2026",
       coordinator: "Dr. Praveen Jadav & Dr. Vakula Rani",
       status: "Upcoming",
@@ -229,3 +242,329 @@ export const departmentActivities = {
     },
   ],
 };
+
+
+// ======================================================
+// IIC PRESIDENT / VICE PRESIDENT ACTIVITIES
+// ======================================================
+
+export const iicActivities = [
+
+  // ---------------- MCA ----------------
+
+  {
+    id: "MCA-1",
+    title:
+      "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+    date: "6 Dec 2025",
+    faculty: "Ms. Moumita Roy",
+    department: "MCA",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "MCA-2",
+    title: "IPR Basics for Innovators & Entrepreneurs",
+    date: "13 Dec 2025",
+    faculty: "Dr. Vakula Rani",
+    department: "MCA",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "MCA-3",
+    title:
+      "Workshop on Design Thinking, Critical Thinking & Innovation Design",
+    date: "7 Jan 2026",
+    faculty: "Dr. Vakula Rani & Ms. Moumita Roy",
+    department: "MCA",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "MCA-4",
+    title:
+      "Inter/Intra Institution Innovation Competition / Hackathon",
+    date: "23 Feb 2026",
+    faculty: "Dr. Mohan Kumar & Dr. Vakula Rani",
+    department: "MCA",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "MCA-5",
+    title: "Inter/Intra Institutional B-Plan Competition",
+    date: "21 May 2026",
+    faculty: "Prof. Moumita Roy",
+    department: "MCA",
+    status: "Completed",
+    reportUploaded: true,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "MCA-6",
+    title: "Inter/Intra Institutional Start-up Competition",
+    date: "25 Jul 2026",
+    faculty: "Dr. Praveen Jadav & Dr. Vakula Rani",
+    department: "MCA",
+    status: "Upcoming",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+
+  // ---------------- MBA ----------------
+
+  {
+    id: "MBA-1",
+    title:
+      "Workshop: Effective Sales and Marketing Strategies for Start-ups",
+    date: "24 Jan 2026",
+    faculty: "Dr. Chandrika",
+    department: "MBA",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "MBA-2",
+    title:
+      "Inter/Intra Institution Innovation Competition / Hackathon",
+    date: "23 Feb 2026",
+    faculty: "Dr. Mohan Kumar & Dr. Vakula Rani",
+    department: "MBA",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "MBA-3",
+    title:
+      "Workshop on Raising Capital and Finance Management for Start-ups",
+    date: "25 Apr 2026",
+    faculty: "Dr. Chandrika",
+    department: "MBA",
+    status: "Completed",
+    reportUploaded: true,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "MBA-4",
+    title: "Lean Startup & MVP Boot Camp",
+    date: "25 Jul 2026",
+    faculty: "Dr. Chandrika",
+    department: "MBA",
+    status: "Upcoming",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+
+  // ---------------- CSE ----------------
+
+  {
+    id: "CSE-1",
+    title:
+      "Awareness Workshop: Entrepreneurship & Innovation as Career Opportunities",
+    date: "26 Oct 2025",
+    faculty: "Dr. Jayanthi",
+    department: "CSE",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "CSE-2",
+    title:
+      "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+    date: "18 Dec 2025",
+    faculty: "Prof. Lynsha",
+    department: "CSE",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "CSE-3",
+    title:
+      "Expert Talk on Technology Readiness Level (TRL), MRL, IRL, IP Commercialization & Tech Transfer",
+    date: "5 Feb 2026",
+    faculty: "Prof. Lynsha",
+    department: "CSE",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "CSE-4",
+    title:
+      "Panel Discussion with Regional/National Startup Ecosystem Enablers",
+    date: "11 Jul 2026",
+    faculty: "Dr. Praveen Jadav & Prof. Lynsha",
+    department: "CSE",
+    status: "Upcoming",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+
+  // ---------------- BASIC SCIENCE ----------------
+
+  {
+    id: "BS-1",
+    title:
+      "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+    date: "27 Dec 2025",
+    faculty: "Dr. Naveen Kumar & Dr. Rajesh Gopal",
+    department: "Basic Science",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "BS-2",
+    title:
+      "Inter/Intra Institutional Hackathon / Idea Challenge",
+    date: "8 Oct 2025",
+    faculty: "Mr. Praveen D Jadhav",
+    department: "Basic Science",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "BS-3",
+    title: "Demo Day / Idea Showcase",
+    date: "26 Nov 2025",
+    faculty: "Dr. Rajesh Gopal",
+    department: "Basic Science",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "BS-4",
+    title:
+      "Innovation & Entrepreneurship Outreach Program in Schools",
+    date: "28 Jan 2026",
+    faculty: "Dr. Meenakshi K",
+    department: "Basic Science",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "BS-5",
+    title:
+      "Field / Exposure Visit to Incubation Units",
+    date: "28 Feb 2026",
+    faculty: "Dr. Naveen Kumar & Dr. Rajesh Gopal",
+    department: "Basic Science",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "BS-6",
+    title:
+      "Workshop on Business Model Canvas (BMC) & Business Model Fit",
+    date: "6 May 2026",
+    faculty: "Dr. Rajesh Gopal",
+    department: "Basic Science",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "BS-7",
+    title:
+      "Mentoring Event: Demo Day / Poster Presentation of Business Plans",
+    date: "9 May 2026",
+    faculty: "Mr. Praveen D Jadhav",
+    department: "Basic Science",
+    status: "Completed",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "BS-8",
+    title:
+      "Innovation & Entrepreneurship Outreach Program in Schools / Community",
+    date: "13 Jul 2026",
+    faculty: "Dr. Meenakshi K",
+    department: "Basic Science",
+    status: "Upcoming",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "BS-9",
+    title:
+      "Innovation & Entrepreneurship Outreach Program in Schools / Community",
+    date: "16 Jul 2026",
+    faculty: "Dr. Rajesh Gopal",
+    department: "Basic Science",
+    status: "Upcoming",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+
+  {
+    id: "BS-10",
+    title:
+      "Inter/Intra Institutional Start-up Competition & Reward Best Start-ups",
+    date: "25 Jul 2026",
+    faculty: "Dr. Praveen Jadav & Dr. Vakula Rani",
+    department: "Basic Science",
+    status: "Upcoming",
+    reportUploaded: false,
+    reportLink: "",
+    videoLink: "",
+  },
+];
