@@ -27,8 +27,27 @@ const departments = [
     password: "basic123",
     department: "Basic Science",
   },
+  {
+    username: "aids",
+    password: "aids123",
+    department: "AI&DS",
+  },
+  {
+    username: "ece",
+    password: "ece123",
+    department: "ECE",
+  },
+  {
+    username: "ise",
+    password: "ise123",
+    department: "ISE",
+  },
+  {
+    username: "aiml",
+    password: "aimldept123",
+    department: "AIML",
+  },
 ];
-
 const iicUsers = [
   {
     username: "president",
@@ -54,21 +73,14 @@ function DepartmentLogin() {
     // IIC PRESIDENT / VICE PRESIDENT LOGIN
     // ==========================================
 
-    if (
-      loginType === "president" ||
-      loginType === "vicepresident"
-    ) {
+    if (loginType === "president" || loginType === "vicepresident") {
       const user = iicUsers.find(
         (person) =>
-          person.username.toLowerCase() ===
-            username.trim().toLowerCase() &&
+          person.username.toLowerCase() === username.trim().toLowerCase() &&
           person.password === password.trim() &&
-          (
-            (loginType === "president" &&
-              person.role === "President") ||
+          ((loginType === "president" && person.role === "President") ||
             (loginType === "vicepresident" &&
-              person.role === "Vice President")
-          )
+              person.role === "Vice President")),
       );
 
       if (!user) {
@@ -93,9 +105,8 @@ function DepartmentLogin() {
 
     const user = departments.find(
       (dept) =>
-        dept.username.trim().toLowerCase() ===
-          username.trim().toLowerCase() &&
-        dept.password === password.trim()
+        dept.username.trim().toLowerCase() === username.trim().toLowerCase() &&
+        dept.password === password.trim(),
     );
 
     if (!user) {
@@ -112,19 +123,14 @@ function DepartmentLogin() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-
       <div className="bg-white shadow-xl rounded-3xl p-10 w-full max-w-[420px]">
-
         {/* TITLE */}
 
-        <h1 className="text-3xl font-bold text-center mb-2">
-          I&E Login
-        </h1>
+        <h1 className="text-3xl font-bold text-center mb-2">I&E Login</h1>
 
         <p className="text-center text-gray-500 mb-8">
           Innovation & Entrepreneurship Cell
         </p>
-
 
         {/* LOGIN TYPE */}
 
@@ -141,19 +147,12 @@ function DepartmentLogin() {
           }}
           className="w-full border border-gray-300 rounded-xl p-3 mb-5 bg-white outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="department">
-            Department
-          </option>
+          <option value="department">Department</option>
 
-          <option value="president">
-            IIC President
-          </option>
+          <option value="president">IIC President</option>
 
-          <option value="vicepresident">
-            IIC Vice President
-          </option>
+          <option value="vicepresident">IIC Vice President</option>
         </select>
-
 
         {/* USERNAME */}
 
@@ -168,7 +167,6 @@ function DepartmentLogin() {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
         />
-
 
         {/* PASSWORD */}
 
@@ -189,7 +187,6 @@ function DepartmentLogin() {
           }}
         />
 
-
         {/* LOGIN BUTTON */}
 
         <button
@@ -198,9 +195,7 @@ function DepartmentLogin() {
         >
           Login
         </button>
-
       </div>
-
     </div>
   );
 }

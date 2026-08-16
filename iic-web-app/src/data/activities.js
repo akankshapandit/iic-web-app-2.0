@@ -20,7 +20,8 @@ export const departmentActivities = {
     },
     {
       id: 3,
-      title: "Workshop on Design Thinking, Critical Thinking & Innovation Design",
+      title:
+        "Workshop on Design Thinking, Critical Thinking & Innovation Design",
       date: "7 Jan 2026",
       coordinator: "Dr. Vakula Rani & Ms. Moumita Roy",
       status: "Completed",
@@ -108,8 +109,7 @@ export const departmentActivities = {
     },
     {
       id: 2,
-      title:
-        "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+      title: "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
       date: "18 Dec 2025",
       coordinator: "Prof. Lynsha",
       status: "Completed",
@@ -143,8 +143,7 @@ export const departmentActivities = {
   "Basic Science": [
     {
       id: 1,
-      title:
-        "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+      title: "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
       date: "27 Dec 2025",
       coordinator: "Dr. Naveen Kumar & Dr. Rajesh Gopal",
       status: "Completed",
@@ -153,8 +152,7 @@ export const departmentActivities = {
     },
     {
       id: 2,
-      title:
-        "Inter/Intra Institutional Hackathon / Idea Challenge",
+      title: "Inter/Intra Institutional Hackathon / Idea Challenge",
       date: "8 Oct 2025",
       coordinator: "Mr. Praveen D Jadhav",
       status: "Completed",
@@ -172,8 +170,7 @@ export const departmentActivities = {
     },
     {
       id: 4,
-      title:
-        "Innovation & Entrepreneurship Outreach Program in Schools",
+      title: "Innovation & Entrepreneurship Outreach Program in Schools",
       date: "28 Jan 2026",
       coordinator: "Dr. Meenakshi K",
       status: "Completed",
@@ -182,8 +179,7 @@ export const departmentActivities = {
     },
     {
       id: 5,
-      title:
-        "Field / Exposure Visit to Incubation Units",
+      title: "Field / Exposure Visit to Incubation Units",
       date: "28 Feb 2026",
       coordinator: "Dr. Naveen Kumar & Dr. Rajesh Gopal",
       status: "Completed",
@@ -192,8 +188,7 @@ export const departmentActivities = {
     },
     {
       id: 6,
-      title:
-        "Workshop on Business Model Canvas (BMC) & Business Model Fit",
+      title: "Workshop on Business Model Canvas (BMC) & Business Model Fit",
       date: "6 May 2026",
       coordinator: "Dr. Rajesh Gopal",
       status: "Completed",
@@ -241,21 +236,200 @@ export const departmentActivities = {
       reportLink: "",
     },
   ],
-};
 
+  "AI&DS": [
+    {
+      id: 1,
+      title:
+        "My Story / Motivational Expert Sessions by Successful Innovators & Entrepreneurs",
+      date: "29 Oct 2025",
+      coordinator: "Dr. Sam Gilvine",
+      status: "Completed",
+      reportUploaded: false,
+      reportLink: "",
+    },
+    {
+      id: 2,
+      title:
+        "AI & Innovation Sprints: Rapid Prototyping for Digital Transformation",
+      date: "25 Feb 2026",
+      coordinator: "Dr. Sam Gilvine",
+      status: "Completed",
+      reportUploaded: false,
+      reportLink: "",
+    },
+    {
+      id: 3,
+      title: "AI-Powered Solution Expo: Demo Days for AI/I4.0 Prototypes",
+      date: "21 May 2026",
+      coordinator: "Dr. Sam Gilvine",
+      status: "Completed",
+      reportUploaded: true,
+      reportLink: "",
+    },
+    {
+      id: 4,
+      title: "Session on Angel Investment/VC Funding Opportunities",
+      date: "",
+      coordinator: "Prof. Manjunatha Babu",
+      status: "Upcoming",
+      reportUploaded: false,
+      reportLink: "",
+    },
+  ],
+
+  ECE: [
+    {
+      id: 1,
+      title:
+        "My Story / Motivational Expert Sessions by Successful Innovators & Entrepreneurs",
+      date: "27 Nov 2025",
+      coordinator: "Dr. Sridevi S",
+      status: "Completed",
+      reportUploaded: false,
+      reportLink: "",
+    },
+    {
+      id: 2,
+      title: "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+      date: "29 Nov 2025",
+      coordinator: "Ms. Keka",
+      status: "Completed",
+      reportUploaded: false,
+      reportLink: "",
+    },
+    {
+      id: 3,
+      title: "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+      date: "27 Dec 2025",
+      coordinator: "Dr. Naveen Kumar & Dr. Rajesh Gopal",
+      status: "Completed",
+      reportUploaded: false,
+      reportLink: "",
+    },
+    {
+      id: 4,
+      title:
+        "Field / Exposure Visit to Incubation Units (AICTE Idea Lab, Fab Lab, MSME Cluster)",
+      date: "28 Feb 2026",
+      coordinator: "Dr. Naveen Kumar & Dr. Rajesh Gopal",
+      status: "Completed",
+      reportUploaded: false,
+      reportLink: "",
+    },
+    {
+      id: 5,
+      title: "Workshop: Protecting IPR and IP Management for Start-ups",
+      date: "20 May 2026",
+      coordinator: "Dr. Meenakshi R Patil & Dr. Sridevi S",
+      status: "Completed",
+      reportUploaded: true,
+      reportLink: "",
+    },
+    {
+      id: 6,
+      title: "Session on Accelerators / Incubation Opportunities",
+      date: "",
+      coordinator: "Dr. Meenakshi R Patil & Dr. Sridevi S",
+      status: "Upcoming",
+      reportUploaded: false,
+      reportLink: "",
+    },
+  ],
+
+  ISE: [
+    {
+      id: 1,
+      title: "Boot Camp on Problem Solving / Ideation",
+      date: "20 Nov 2025",
+      coordinator: "Dr. S. Seetha",
+      status: "Completed",
+      reportUploaded: false,
+      reportLink: "",
+    },
+    {
+      id: 2,
+      title: "Session on Achieving Problem-Solution Fit",
+      date: "11 Dec 2025",
+      coordinator: "Prof. Komala Devi",
+      status: "Completed",
+      reportUploaded: false,
+      reportLink: "",
+    },
+    {
+      id: 3,
+      title:
+        "Field / Exposure Visit to Incubation Units, Patent Facilitation & Tech Transfer Centres",
+      date: "18 Mar 2026",
+      coordinator: "Prof. Komala Devi",
+      status: "Completed",
+      reportUploaded: true,
+      reportLink: "",
+    },
+    {
+      id: 4,
+      title:
+        "Workshop on Product-Market Fit, Prototype / Process Design and MVP Development",
+      date: "2 Apr 2026",
+      coordinator: "Dr. S. Seetha",
+      status: "Completed",
+      reportUploaded: true,
+      reportLink: "",
+    },
+    {
+      id: 5,
+      title:
+        "Session on Innovation / Prototype Validation & Value Proposition Fit",
+      date: "19 Aug 2026",
+      coordinator: "Prof. Komala Devi",
+      status: "Upcoming",
+      reportUploaded: false,
+      reportLink: "",
+    },
+  ],
+
+  AIML: [
+    {
+      id: 1,
+      title:
+        "Innovation Showcase: Demo Day / Exhibition / Poster Presentation of Prototypes",
+      date: "24 Dec 2025",
+      coordinator: "Prof. Novy Jacob",
+      status: "Completed",
+      reportUploaded: false,
+      reportLink: "",
+    },
+    {
+      id: 2,
+      title: "Session on Start-up Legal & Ethical Steps",
+      date: "3 Apr 2026",
+      coordinator: "Prof. Novy Jacob",
+      status: "Completed",
+      reportUploaded: true,
+      reportLink: "",
+    },
+    {
+      id: 3,
+      title: "Workshop: Using AI for Fundraising & Investor Pitch Preparation",
+      date: "8 May 2026",
+      coordinator: "Prof. Novy Jacob",
+      status: "Upcoming",
+      reportUploaded: false,
+      reportLink: "",
+    },
+  ],
+};
 
 // ======================================================
 // IIC PRESIDENT / VICE PRESIDENT ACTIVITIES
 // ======================================================
 
 export const iicActivities = [
-
   // ---------------- MCA ----------------
 
   {
     id: "MCA-1",
-    title:
-      "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+    title: "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
     date: "6 Dec 2025",
     faculty: "Ms. Moumita Roy",
     department: "MCA",
@@ -279,8 +453,7 @@ export const iicActivities = [
 
   {
     id: "MCA-3",
-    title:
-      "Workshop on Design Thinking, Critical Thinking & Innovation Design",
+    title: "Workshop on Design Thinking, Critical Thinking & Innovation Design",
     date: "7 Jan 2026",
     faculty: "Dr. Vakula Rani & Ms. Moumita Roy",
     department: "MCA",
@@ -292,8 +465,7 @@ export const iicActivities = [
 
   {
     id: "MCA-4",
-    title:
-      "Inter/Intra Institution Innovation Competition / Hackathon",
+    title: "Inter/Intra Institution Innovation Competition / Hackathon",
     date: "23 Feb 2026",
     faculty: "Dr. Mohan Kumar & Dr. Vakula Rani",
     department: "MCA",
@@ -327,13 +499,11 @@ export const iicActivities = [
     videoLink: "",
   },
 
-
   // ---------------- MBA ----------------
 
   {
     id: "MBA-1",
-    title:
-      "Workshop: Effective Sales and Marketing Strategies for Start-ups",
+    title: "Workshop: Effective Sales and Marketing Strategies for Start-ups",
     date: "24 Jan 2026",
     faculty: "Dr. Chandrika",
     department: "MBA",
@@ -345,8 +515,7 @@ export const iicActivities = [
 
   {
     id: "MBA-2",
-    title:
-      "Inter/Intra Institution Innovation Competition / Hackathon",
+    title: "Inter/Intra Institution Innovation Competition / Hackathon",
     date: "23 Feb 2026",
     faculty: "Dr. Mohan Kumar & Dr. Vakula Rani",
     department: "MBA",
@@ -358,8 +527,7 @@ export const iicActivities = [
 
   {
     id: "MBA-3",
-    title:
-      "Workshop on Raising Capital and Finance Management for Start-ups",
+    title: "Workshop on Raising Capital and Finance Management for Start-ups",
     date: "25 Apr 2026",
     faculty: "Dr. Chandrika",
     department: "MBA",
@@ -381,7 +549,6 @@ export const iicActivities = [
     videoLink: "",
   },
 
-
   // ---------------- CSE ----------------
 
   {
@@ -399,8 +566,7 @@ export const iicActivities = [
 
   {
     id: "CSE-2",
-    title:
-      "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+    title: "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
     date: "18 Dec 2025",
     faculty: "Prof. Lynsha",
     department: "CSE",
@@ -425,8 +591,7 @@ export const iicActivities = [
 
   {
     id: "CSE-4",
-    title:
-      "Panel Discussion with Regional/National Startup Ecosystem Enablers",
+    title: "Panel Discussion with Regional/National Startup Ecosystem Enablers",
     date: "11 Jul 2026",
     faculty: "Dr. Praveen Jadav & Prof. Lynsha",
     department: "CSE",
@@ -436,13 +601,11 @@ export const iicActivities = [
     videoLink: "",
   },
 
-
   // ---------------- BASIC SCIENCE ----------------
 
   {
     id: "BS-1",
-    title:
-      "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
+    title: "Workshop on AI and I4.0 Tools for Innovators and Entrepreneurs",
     date: "27 Dec 2025",
     faculty: "Dr. Naveen Kumar & Dr. Rajesh Gopal",
     department: "Basic Science",
@@ -454,8 +617,7 @@ export const iicActivities = [
 
   {
     id: "BS-2",
-    title:
-      "Inter/Intra Institutional Hackathon / Idea Challenge",
+    title: "Inter/Intra Institutional Hackathon / Idea Challenge",
     date: "8 Oct 2025",
     faculty: "Mr. Praveen D Jadhav",
     department: "Basic Science",
@@ -479,8 +641,7 @@ export const iicActivities = [
 
   {
     id: "BS-4",
-    title:
-      "Innovation & Entrepreneurship Outreach Program in Schools",
+    title: "Innovation & Entrepreneurship Outreach Program in Schools",
     date: "28 Jan 2026",
     faculty: "Dr. Meenakshi K",
     department: "Basic Science",
@@ -492,8 +653,7 @@ export const iicActivities = [
 
   {
     id: "BS-5",
-    title:
-      "Field / Exposure Visit to Incubation Units",
+    title: "Field / Exposure Visit to Incubation Units",
     date: "28 Feb 2026",
     faculty: "Dr. Naveen Kumar & Dr. Rajesh Gopal",
     department: "Basic Science",
@@ -505,8 +665,7 @@ export const iicActivities = [
 
   {
     id: "BS-6",
-    title:
-      "Workshop on Business Model Canvas (BMC) & Business Model Fit",
+    title: "Workshop on Business Model Canvas (BMC) & Business Model Fit",
     date: "6 May 2026",
     faculty: "Dr. Rajesh Gopal",
     department: "Basic Science",
@@ -518,8 +677,7 @@ export const iicActivities = [
 
   {
     id: "BS-7",
-    title:
-      "Mentoring Event: Demo Day / Poster Presentation of Business Plans",
+    title: "Mentoring Event: Demo Day / Poster Presentation of Business Plans",
     date: "9 May 2026",
     faculty: "Mr. Praveen D Jadhav",
     department: "Basic Science",
