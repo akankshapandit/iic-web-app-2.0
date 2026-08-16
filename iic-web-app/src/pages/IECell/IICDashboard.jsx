@@ -5,139 +5,151 @@ import { departmentActivities } from "../../data/activities";
 function IICDashboard() {
   const navigate = useNavigate();
 
-  // ==========================================
-  // IIC USER INFORMATION
-  // ==========================================
-
-  const role = localStorage.getItem("iicRole") || "IIC Member";
-  const username = localStorage.getItem("iicUsername") || "";
-
-  // ==========================================
-  // STATES
-  // ==========================================
+  const role = localStorage.getItem("iicRole");
+  const username = localStorage.getItem("iicUsername");
 
   const [activities, setActivities] = useState([]);
 
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [reportInputs, setReportInputs] = useState({});
+  const [videoInputs, setVideoInputs] = useState({});
 
-  const [selectedActivity, setSelectedActivity] = useState(null);
+  const [editingReport, setEditingReport] = useState(null);
+  const [editingVideo, setEditingVideo] = useState(null);
+
+  const [showAddActivity, setShowAddActivity] = useState(false);
 
   const [newActivity, setNewActivity] = useState({
     title: "",
     date: "",
     coordinator: "",
     department: "",
-    reportLink: "",
-    videoLink: "",
+    status: "Upcoming",
   });
 
-  // ==========================================
-  // CONVERT DEPARTMENT ACTIVITIES
-  // INTO IIC ACTIVITIES
-  // ==========================================
-
-  const getInitialIICActivities = () => {
-    const allActivities = [];
-
-    Object.entries(departmentActivities).forEach(
-      ([department, departmentEvents]) => {
-        departmentEvents.forEach((activity) => {
-          allActivities.push({
-            ...activity,
-
-            // Give every event a unique IIC ID
-            id: `department-${department}-${activity.id}`,
-
-            // Add department information
-            department: department,
-
-            // Keep Google Drive fields
-            reportLink: activity.reportLink || "",
-            videoLink: activity.videoLink || "",
-          });
-        });
-      }
-    );
-
-    return allActivities;
-  };
-
-  // ==========================================
+  // =========================================================
   // LOAD ACTIVITIES
-  // ==========================================
+  // =========================================================
 
   useEffect(() => {
     const savedActivities = localStorage.getItem("iicActivities");
-    const initialized = localStorage.getItem(
-      "iicActivitiesInitialized"
-    );
 
-    /*
-      First time opening IIC Dashboard:
-      Load all activities from activities.js
-    */
+    if (savedActivities) {
+      setActivities(JSON.parse(savedActivities));
+    } else {
+      const allActivities = [];
 
-    if (!initialized) {
-      const initialActivities = getInitialIICActivities();
+      Object.entries(departmentActivities).forEach(
+        ([department, departmentEvents]) => {
+          departmentEvents.forEach((activity) => {
+            allActivities.push({
+              ...activity,
+              uniqueId: `${department}-${activity.id}`,
+              department,
+              reportLink: activity.reportLink || "",
+              videoLink: activity.videoLink || "",
+            });
+          });
+        }
+      );
 
-      setActivities(initialActivities);
+      setActivities(allActivities);
 
       localStorage.setItem(
         "iicActivities",
-        JSON.stringify(initialActivities)
+        JSON.stringify(allActivities)
       );
-
-      localStorage.setItem(
-        "iicActivitiesInitialized",
-        "true"
-      );
-
-      return;
-    }
-
-    /*
-      After initialization:
-      Load activities from localStorage
-    */
-
-    if (savedActivities) {
-      try {
-        setActivities(JSON.parse(savedActivities));
-      } catch (error) {
-        console.error(
-          "Error loading IIC activities:",
-          error
-        );
-
-        const initialActivities =
-          getInitialIICActivities();
-
-        setActivities(initialActivities);
-      }
-    } else {
-      const initialActivities =
-        getInitialIICActivities();
-
-      setActivities(initialActivities);
     }
   }, []);
 
-  // ==========================================
+  // =========================================================
   // SAVE ACTIVITIES
-  // ==========================================
+  // =========================================================
 
-  useEffect(() => {
-    if (activities.length > 0) {
-      localStorage.setItem(
-        "iicActivities",
-        JSON.stringify(activities)
-      );
+  const saveActivities = (updatedActivities) => {
+    setActivities(updatedActivities);
+
+    localStorage.setItem(
+      "iicActivities",
+      JSON.stringify(updatedActivities)
+    );
+  };
+
+  // =========================================================
+  // SAVE REPORT
+  // =========================================================
+
+  const saveReport = (activityId) => {
+    const link = reportInputs[activityId]?.trim();
+
+    if (!link) {
+      alert("Please paste a Google Drive report link.");
+      return;
     }
-  }, [activities]);
 
-  // ==========================================
+    if (!link.startsWith("http")) {
+      alert("Please enter a valid Google Drive link.");
+      return;
+    }
+
+    const updatedActivities = activities.map((activity) =>
+      activity.uniqueId === activityId
+        ? {
+            ...activity,
+            reportLink: link,
+            reportUploaded: true,
+          }
+        : activity
+    );
+
+    saveActivities(updatedActivities);
+
+    setReportInputs((prev) => ({
+      ...prev,
+      [activityId]: "",
+    }));
+
+    setEditingReport(null);
+  };
+
+  // =========================================================
+  // SAVE VIDEO
+  // =========================================================
+
+  const saveVideo = (activityId) => {
+    const link = videoInputs[activityId]?.trim();
+
+    if (!link) {
+      alert("Please paste a Google Drive event video link.");
+      return;
+    }
+
+    if (!link.startsWith("http")) {
+      alert("Please enter a valid Google Drive link.");
+      return;
+    }
+
+    const updatedActivities = activities.map((activity) =>
+      activity.uniqueId === activityId
+        ? {
+            ...activity,
+            videoLink: link,
+          }
+        : activity
+    );
+
+    saveActivities(updatedActivities);
+
+    setVideoInputs((prev) => ({
+      ...prev,
+      [activityId]: "",
+    }));
+
+    setEditingVideo(null);
+  };
+
+  // =========================================================
   // LOGOUT
-  // ==========================================
+  // =========================================================
 
   const handleLogout = () => {
     localStorage.removeItem("iicLoggedIn");
@@ -147,242 +159,128 @@ function IICDashboard() {
     navigate("/ie-cell/login");
   };
 
-  // ==========================================
+  // =========================================================
   // ADD ACTIVITY
-  // ==========================================
+  // =========================================================
 
-  const handleAddActivity = () => {
+  const addActivity = () => {
     if (
       !newActivity.title.trim() ||
-      !newActivity.date ||
+      !newActivity.date.trim() ||
       !newActivity.coordinator.trim() ||
       !newActivity.department.trim()
     ) {
-      alert("Please fill all required fields.");
+      alert("Please fill all activity details.");
       return;
     }
 
+    const newId = `custom-${Date.now()}`;
+
     const activity = {
-      id: `iic-${Date.now()}`,
-
+      uniqueId: newId,
+      id: newId,
       title: newActivity.title.trim(),
-
-      date: newActivity.date,
-
-      coordinator:
-        newActivity.coordinator.trim(),
-
-      department:
-        newActivity.department.trim(),
-
-      status: "Upcoming",
-
-      reportLink:
-        newActivity.reportLink.trim(),
-
-      videoLink:
-        newActivity.videoLink.trim(),
+      date: newActivity.date.trim(),
+      coordinator: newActivity.coordinator.trim(),
+      department: newActivity.department.trim(),
+      status: newActivity.status,
+      reportUploaded: false,
+      reportLink: "",
+      videoLink: "",
     };
 
-    setActivities((prev) => [
-      ...prev,
-      activity,
-    ]);
+    const updatedActivities = [...activities, activity];
+
+    saveActivities(updatedActivities);
 
     setNewActivity({
       title: "",
       date: "",
       coordinator: "",
       department: "",
-      reportLink: "",
-      videoLink: "",
+      status: "Upcoming",
     });
 
-    setShowAddModal(false);
+    setShowAddActivity(false);
   };
 
-  // ==========================================
+  // =========================================================
   // MARK COMPLETED
-  // ==========================================
+  // =========================================================
 
-  const handleMarkCompleted = (id) => {
-    setActivities((prev) =>
-      prev.map((activity) =>
-        activity.id === id
-          ? {
-              ...activity,
-              status: "Completed",
-            }
-          : activity
-      )
-    );
-
-    if (selectedActivity?.id === id) {
-      setSelectedActivity((prev) => ({
-        ...prev,
-        status: "Completed",
-      }));
-    }
-  };
-
-  // ==========================================
-  // DELETE ACTIVITY
-  // ==========================================
-
-  const handleDeleteActivity = (id) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this activity?"
-    );
-
-    if (!confirmDelete) return;
-
-    setActivities((prev) =>
-      prev.filter(
-        (activity) => activity.id !== id
-      )
-    );
-
-    setSelectedActivity(null);
-  };
-
-  // ==========================================
-  // UPDATE REPORT LINK
-  // ==========================================
-
-  const handleUpdateReport = (id) => {
-    const link = window.prompt(
-      "Enter Google Drive Report Link:"
-    );
-
-    if (link === null) return;
-
-    const updatedLink = link.trim();
-
-    setActivities((prev) =>
-      prev.map((activity) =>
-        activity.id === id
-          ? {
-              ...activity,
-              reportLink: updatedLink,
-            }
-          : activity
-      )
-    );
-
-    setSelectedActivity((prev) =>
-      prev
+  const markCompleted = (activityId) => {
+    const updatedActivities = activities.map((activity) =>
+      activity.uniqueId === activityId
         ? {
-            ...prev,
-            reportLink: updatedLink,
+            ...activity,
+            status: "Completed",
           }
-        : prev
+        : activity
     );
+
+    saveActivities(updatedActivities);
   };
 
-  // ==========================================
-  // UPDATE VIDEO LINK
-  // ==========================================
-
-  const handleUpdateVideo = (id) => {
-    const link = window.prompt(
-      "Enter Google Drive Event Video Link:"
-    );
-
-    if (link === null) return;
-
-    const updatedLink = link.trim();
-
-    setActivities((prev) =>
-      prev.map((activity) =>
-        activity.id === id
-          ? {
-              ...activity,
-              videoLink: updatedLink,
-            }
-          : activity
-      )
-    );
-
-    setSelectedActivity((prev) =>
-      prev
-        ? {
-            ...prev,
-            videoLink: updatedLink,
-          }
-        : prev
-    );
-  };
-
-  // ==========================================
+  // =========================================================
   // STATISTICS
-  // ==========================================
+  // =========================================================
 
-  const completedCount =
-    activities.filter(
-      (activity) =>
-        activity.status === "Completed"
-    ).length;
+  const totalActivities = activities.length;
 
-  const upcomingCount =
-    activities.filter(
-      (activity) =>
-        activity.status === "Upcoming"
-    ).length;
+  const completedActivities = activities.filter(
+    (activity) => activity.status === "Completed"
+  ).length;
 
-  const reportsCount =
-    activities.filter(
-      (activity) =>
-        activity.reportLink
-    ).length;
+  const upcomingActivities = activities.filter(
+    (activity) => activity.status === "Upcoming"
+  ).length;
 
-  const videosCount =
-    activities.filter(
-      (activity) =>
-        activity.videoLink
-    ).length;
+  const resourcesCount = activities.filter(
+    (activity) => activity.reportLink || activity.videoLink
+  ).length;
 
-  // ==========================================
-  // UI
-  // ==========================================
+  // =========================================================
+  // RETURN
+  // =========================================================
 
   return (
     <div className="min-h-screen bg-slate-100">
 
-      {/* ======================================
+      {/* =====================================================
           HEADER
-      ====================================== */}
+      ===================================================== */}
 
-      <header className="bg-gradient-to-r from-blue-800 to-indigo-800 text-white shadow-lg">
+      <div className="bg-gradient-to-r from-blue-800 to-indigo-800 text-white">
 
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="max-w-7xl mx-auto px-6 py-8">
 
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+          <div className="flex justify-between items-center">
 
             <div>
 
-              <p className="text-blue-200 text-sm font-medium">
+              <p className="text-blue-200 text-sm">
                 Innovation & Entrepreneurship Cell
               </p>
 
-              <h1 className="text-3xl md:text-4xl font-bold mt-1">
+              <h1 className="text-4xl font-bold mt-1">
                 IIC Dashboard
               </h1>
 
               <p className="text-blue-100 mt-2">
-                Welcome, {role}
+                Welcome, {role || "IIC Member"}
               </p>
 
             </div>
 
             <div className="flex items-center gap-4">
 
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-3">
+              <div className="bg-white/10 px-5 py-3 rounded-xl">
 
                 <p className="text-xs text-blue-200">
                   Logged in as
                 </p>
 
-                <p className="font-semibold">
+                <p className="font-bold">
                   {role}
                 </p>
 
@@ -390,7 +288,7 @@ function IICDashboard() {
 
               <button
                 onClick={handleLogout}
-                className="bg-white text-blue-700 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition"
+                className="bg-white text-blue-800 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition"
               >
                 Logout
               </button>
@@ -401,120 +299,110 @@ function IICDashboard() {
 
         </div>
 
-      </header>
+      </div>
 
-      {/* ======================================
+
+      {/* =====================================================
           MAIN
-      ====================================== */}
+      ===================================================== */}
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-10">
 
-        {/* ======================================
-            WELCOME
-        ====================================== */}
+        {/* TITLE */}
 
-        <div className="mb-8">
+        <div className="flex justify-between items-center mb-8">
 
-          <h2 className="text-3xl font-bold text-gray-800">
-            IIC Activity Management
-          </h2>
+          <div>
 
-          <p className="text-gray-500 mt-2">
-            Manage IIC events, reports and event videos.
-          </p>
+            <h2 className="text-3xl font-bold text-gray-800">
+              IIC Activity Management
+            </h2>
 
-        </div>
-
-        {/* ======================================
-            STATISTICS
-        ====================================== */}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-
-          {/* Total */}
-
-          <div className="bg-white rounded-2xl shadow p-6">
-
-            <p className="text-gray-500 text-sm">
-              Total Activities
-            </p>
-
-            <p className="text-3xl font-bold text-blue-700 mt-2">
-              {activities.length}
+            <p className="text-gray-500 mt-2">
+              Manage IIC events, reports and event videos.
             </p>
 
           </div>
-
-          {/* Completed */}
-
-          <div className="bg-white rounded-2xl shadow p-6">
-
-            <p className="text-gray-500 text-sm">
-              Completed
-            </p>
-
-            <p className="text-3xl font-bold text-green-600 mt-2">
-              {completedCount}
-            </p>
-
-          </div>
-
-          {/* Upcoming */}
-
-          <div className="bg-white rounded-2xl shadow p-6">
-
-            <p className="text-gray-500 text-sm">
-              Upcoming
-            </p>
-
-            <p className="text-3xl font-bold text-orange-500 mt-2">
-              {upcomingCount}
-            </p>
-
-          </div>
-
-          {/* Reports / Videos */}
-
-          <div className="bg-white rounded-2xl shadow p-6">
-
-            <p className="text-gray-500 text-sm">
-              Reports / Videos
-            </p>
-
-            <p className="text-3xl font-bold text-purple-600 mt-2">
-              {reportsCount + videosCount}
-            </p>
-
-          </div>
-
-        </div>
-
-        {/* ======================================
-            ADD ACTIVITY BUTTON
-        ====================================== */}
-
-        <div className="flex justify-end mb-6">
 
           <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-xl font-semibold shadow-lg transition"
+            onClick={() => setShowAddActivity(true)}
+            className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-xl font-semibold transition"
           >
             + Add Activity
           </button>
 
         </div>
 
-        {/* ======================================
-            ACTIVITY LIST
-        ====================================== */}
+
+        {/* =====================================================
+            STATISTICS
+        ===================================================== */}
+
+        <div className="grid md:grid-cols-4 gap-5 mb-10">
+
+          <div className="bg-white rounded-2xl shadow p-6">
+            <p className="text-gray-500">
+              Total Activities
+            </p>
+
+            <p className="text-4xl font-bold text-blue-700 mt-2">
+              {totalActivities}
+            </p>
+          </div>
+
+
+          <div className="bg-white rounded-2xl shadow p-6">
+
+            <p className="text-gray-500">
+              Completed
+            </p>
+
+            <p className="text-4xl font-bold text-green-600 mt-2">
+              {completedActivities}
+            </p>
+
+          </div>
+
+
+          <div className="bg-white rounded-2xl shadow p-6">
+
+            <p className="text-gray-500">
+              Upcoming
+            </p>
+
+            <p className="text-4xl font-bold text-orange-500 mt-2">
+              {upcomingActivities}
+            </p>
+
+          </div>
+
+
+          <div className="bg-white rounded-2xl shadow p-6">
+
+            <p className="text-gray-500">
+              Reports / Videos
+            </p>
+
+            <p className="text-4xl font-bold text-purple-600 mt-2">
+              {resourcesCount}
+            </p>
+
+          </div>
+
+        </div>
+
+
+        {/* =====================================================
+            ACTIVITIES
+        ===================================================== */}
 
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
 
-          <div className="p-6 border-b">
+          <div className="p-7 border-b">
 
-            <h3 className="text-2xl font-bold text-gray-800">
+            <h2 className="text-2xl font-bold text-gray-800">
               IIC Activities
-            </h3>
+            </h2>
 
             <p className="text-gray-500 mt-1">
               All activities conducted by the Innovation & Entrepreneurship Cell.
@@ -522,173 +410,45 @@ function IICDashboard() {
 
           </div>
 
+
+          {/* ACTIVITY LIST */}
+
           {activities.length === 0 ? (
 
-            <div className="p-16 text-center">
-
-              <div className="text-5xl mb-4">
-                📅
-              </div>
-
-              <h3 className="text-xl font-semibold text-gray-700">
-                No activities added yet
-              </h3>
-
-              <p className="text-gray-500 mt-2">
-                Click "Add Activity" to create your first IIC event.
-              </p>
-
+            <div className="p-12 text-center text-gray-500">
+              No activities available.
             </div>
 
           ) : (
 
-            <div className="divide-y">
+            activities.map((activity) => (
 
-              {activities.map((activity) => (
+              <div
+                key={activity.uniqueId}
+                className="p-7 border-b last:border-b-0"
+              >
 
-                <div
-                  key={activity.id}
-                  className="p-6 hover:bg-gray-50 transition"
-                >
+                {/* ACTIVITY HEADER */}
 
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+                <div className="flex justify-between items-start gap-5">
 
-                    {/* Activity Information */}
+                  <div>
 
-                    <div className="flex-1">
+                    <div className="flex items-center gap-3 flex-wrap">
 
-                      <div className="flex flex-wrap items-center gap-3 mb-3">
+                      <h3 className="text-2xl font-bold text-blue-700">
+                        {activity.title}
+                      </h3>
 
-                        <h3 className="text-xl font-bold text-blue-700">
-                          {activity.title}
-                        </h3>
-
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            activity.status === "Completed"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-orange-100 text-orange-700"
-                          }`}
-                        >
-                          {activity.status}
-                        </span>
-
-                      </div>
-
-                      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
-
-                        {/* Date */}
-
-                        <div>
-
-                          <p className="text-gray-400">
-                            Date
-                          </p>
-
-                          <p className="font-semibold text-gray-700">
-                            {activity.date}
-                          </p>
-
-                        </div>
-
-                        {/* Faculty */}
-
-                        <div>
-
-                          <p className="text-gray-400">
-                            Faculty / Coordinator
-                          </p>
-
-                          <p className="font-semibold text-gray-700">
-                            {activity.coordinator}
-                          </p>
-
-                        </div>
-
-                        {/* Department */}
-
-                        <div>
-
-                          <p className="text-gray-400">
-                            Department
-                          </p>
-
-                          <p className="font-semibold text-gray-700">
-                            {activity.department}
-                          </p>
-
-                        </div>
-
-                        {/* Resources */}
-
-                        <div>
-
-                          <p className="text-gray-400">
-                            Resources
-                          </p>
-
-                          <div className="flex gap-2 mt-1 flex-wrap">
-
-                            {activity.reportLink && (
-
-                              <span className="text-green-600 font-semibold">
-                                📄 Report
-                              </span>
-
-                            )}
-
-                            {activity.videoLink && (
-
-                              <span className="text-purple-600 font-semibold">
-                                🎥 Video
-                              </span>
-
-                            )}
-
-                            {!activity.reportLink &&
-                              !activity.videoLink && (
-
-                                <span className="text-gray-400">
-                                  None
-                                </span>
-
-                              )}
-
-                          </div>
-
-                        </div>
-
-                      </div>
-
-                    </div>
-
-                    {/* Actions */}
-
-                    <div className="flex flex-wrap gap-2">
-
-                      <button
-                        onClick={() =>
-                          setSelectedActivity(activity)
-                        }
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-semibold transition"
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                          activity.status === "Completed"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-orange-100 text-orange-700"
+                        }`}
                       >
-                        View
-                      </button>
-
-                      {activity.status === "Upcoming" && (
-
-                        <button
-                          onClick={() =>
-                            handleMarkCompleted(
-                              activity.id
-                            )
-                          }
-                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-semibold transition"
-                        >
-                          Complete
-                        </button>
-
-                      )}
+                        {activity.status}
+                      </span>
 
                     </div>
 
@@ -696,55 +456,382 @@ function IICDashboard() {
 
                 </div>
 
-              ))}
 
-            </div>
+                {/* BASIC INFORMATION */}
+
+                <div className="grid md:grid-cols-3 gap-6 mt-6">
+
+                  <div>
+                    <p className="text-gray-400 text-sm">
+                      Date
+                    </p>
+
+                    <p className="font-semibold text-gray-800 mt-1">
+                      {activity.date}
+                    </p>
+                  </div>
+
+
+                  <div>
+                    <p className="text-gray-400 text-sm">
+                      Faculty / Coordinator
+                    </p>
+
+                    <p className="font-semibold text-gray-800 mt-1">
+                      {activity.coordinator}
+                    </p>
+                  </div>
+
+
+                  <div>
+                    <p className="text-gray-400 text-sm">
+                      Department
+                    </p>
+
+                    <p className="font-semibold text-gray-800 mt-1">
+                      {activity.department}
+                    </p>
+                  </div>
+
+                </div>
+
+
+                {/* =================================================
+                    REPORT + VIDEO
+                ================================================= */}
+
+                <div className="grid md:grid-cols-2 gap-4 mt-6">
+
+                  {/* =================================================
+                      EVENT REPORT
+                  ================================================= */}
+
+                  <div
+                    className={`border border-gray-300 rounded-xl ${
+                      activity.reportLink &&
+                      editingReport !== activity.uniqueId
+                        ? "p-3"
+                        : "p-4"
+                    }`}
+                  >
+
+                    <div className="flex items-center gap-2">
+
+                      <span className="text-lg">
+                        📄
+                      </span>
+
+                      <h4 className="font-bold text-base">
+                        Event Report
+                      </h4>
+
+                    </div>
+
+
+                    <p className="text-gray-500 text-xs mt-1">
+                      Google Drive report
+                    </p>
+
+
+                    {/* SAVED REPORT */}
+
+                    {activity.reportLink &&
+                    editingReport !== activity.uniqueId ? (
+
+                      <div className="flex gap-2 mt-3">
+
+                        <a
+                          href={activity.reportLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition"
+                        >
+                          View Report
+                        </a>
+
+
+                        <button
+                          onClick={() => {
+                            setEditingReport(activity.uniqueId);
+
+                            setReportInputs((prev) => ({
+                              ...prev,
+                              [activity.uniqueId]: "",
+                            }));
+                          }}
+                          className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-semibold text-sm transition"
+                        >
+                          Upload Another Report
+                        </button>
+
+                      </div>
+
+                    ) : (
+
+                      /* UPLOAD REPORT */
+
+                      <div className="mt-3">
+
+                        <input
+                          type="text"
+                          value={
+                            reportInputs[activity.uniqueId] || ""
+                          }
+                          onChange={(e) =>
+                            setReportInputs((prev) => ({
+                              ...prev,
+                              [activity.uniqueId]:
+                                e.target.value,
+                            }))
+                          }
+                          placeholder="Paste Google Drive report link"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+
+
+                        <div className="flex gap-2 mt-2">
+
+                          <button
+                            onClick={() =>
+                              saveReport(activity.uniqueId)
+                            }
+                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition"
+                          >
+                            Save Report
+                          </button>
+
+
+                          {activity.reportLink && (
+
+                            <button
+                              onClick={() => {
+                                setEditingReport(null);
+
+                                setReportInputs((prev) => ({
+                                  ...prev,
+                                  [activity.uniqueId]: "",
+                                }));
+                              }}
+                              className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg font-semibold text-sm"
+                            >
+                              Cancel
+                            </button>
+
+                          )}
+
+                        </div>
+
+                      </div>
+
+                    )}
+
+                  </div>
+
+
+                  {/* =================================================
+                      EVENT VIDEO
+                  ================================================= */}
+
+                  <div
+                    className={`border border-gray-300 rounded-xl ${
+                      activity.videoLink &&
+                      editingVideo !== activity.uniqueId
+                        ? "p-3"
+                        : "p-4"
+                    }`}
+                  >
+
+                    <div className="flex items-center gap-2">
+
+                      <span className="text-lg">
+                        🎥
+                      </span>
+
+                      <h4 className="font-bold text-base">
+                        Event Video
+                      </h4>
+
+                    </div>
+
+
+                    <p className="text-gray-500 text-xs mt-1">
+                      Google Drive event video
+                    </p>
+
+
+                    {/* SAVED VIDEO */}
+
+                    {activity.videoLink &&
+                    editingVideo !== activity.uniqueId ? (
+
+                      <div className="flex gap-2 mt-3">
+
+                        <a
+                          href={activity.videoLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition"
+                        >
+                          View Event Video
+                        </a>
+
+
+                        <button
+                          onClick={() => {
+                            setEditingVideo(activity.uniqueId);
+
+                            setVideoInputs((prev) => ({
+                              ...prev,
+                              [activity.uniqueId]: "",
+                            }));
+                          }}
+                          className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-semibold text-sm transition"
+                        >
+                          Upload Another Video
+                        </button>
+
+                      </div>
+
+                    ) : (
+
+                      /* UPLOAD VIDEO */
+
+                      <div className="mt-3">
+
+                        <input
+                          type="text"
+                          value={
+                            videoInputs[activity.uniqueId] || ""
+                          }
+                          onChange={(e) =>
+                            setVideoInputs((prev) => ({
+                              ...prev,
+                              [activity.uniqueId]:
+                                e.target.value,
+                            }))
+                          }
+                          placeholder="Paste Google Drive video link"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+
+
+                        <div className="flex gap-2 mt-2">
+
+                          <button
+                            onClick={() =>
+                              saveVideo(activity.uniqueId)
+                            }
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition"
+                          >
+                            Save Video
+                          </button>
+
+
+                          {activity.videoLink && (
+
+                            <button
+                              onClick={() => {
+                                setEditingVideo(null);
+
+                                setVideoInputs((prev) => ({
+                                  ...prev,
+                                  [activity.uniqueId]: "",
+                                }));
+                              }}
+                              className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg font-semibold text-sm"
+                            >
+                              Cancel
+                            </button>
+
+                          )}
+
+                        </div>
+
+                      </div>
+
+                    )}
+
+                  </div>
+
+                </div>
+
+
+                {/* =================================================
+                    COMPLETION
+                ================================================= */}
+
+                <div className="mt-5">
+
+                  {activity.status === "Completed" ? (
+
+                    <div className="inline-block bg-green-100 text-green-700 px-4 py-2 rounded-lg font-semibold text-sm">
+                      ✔ Activity Completed
+                    </div>
+
+                  ) : (
+
+                    <button
+                      onClick={() =>
+                        markCompleted(activity.uniqueId)
+                      }
+                      className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-semibold transition"
+                    >
+                      Mark as Completed
+                    </button>
+
+                  )}
+
+                </div>
+
+              </div>
+
+            ))
 
           )}
 
         </div>
 
-      </main>
+      </div>
 
-      {/* ======================================
+
+      {/* =====================================================
           ADD ACTIVITY MODAL
-      ====================================== */}
+      ===================================================== */}
 
-      {showAddModal && (
+      {showAddActivity && (
 
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-5">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-5">
 
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8">
 
-            {/* Header */}
-
-            <div className="bg-gradient-to-r from-blue-700 to-indigo-700 text-white p-7 rounded-t-3xl">
+            <div className="flex justify-between items-center mb-6">
 
               <h2 className="text-2xl font-bold">
                 Add IIC Activity
               </h2>
 
-              <p className="text-blue-100 mt-1">
-                Enter the details of the event.
-              </p>
+              <button
+                onClick={() => setShowAddActivity(false)}
+                className="text-gray-500 hover:text-gray-800 text-2xl"
+              >
+                ×
+              </button>
 
             </div>
 
-            {/* Form */}
 
-            <div className="p-7 space-y-5">
+            <div className="space-y-4">
 
-              {/* Event Title */}
+              {/* TITLE */}
 
               <div>
 
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Event Title *
+                <label className="block font-semibold mb-2">
+                  Event Title
                 </label>
 
                 <input
                   type="text"
-                  placeholder="Enter event title"
                   value={newActivity.title}
                   onChange={(e) =>
                     setNewActivity({
@@ -752,21 +839,23 @@ function IICDashboard() {
                       title: e.target.value,
                     })
                   }
-                  className="w-full border border-gray-300 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter event title"
+                  className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
                 />
 
               </div>
 
-              {/* Date */}
+
+              {/* DATE */}
 
               <div>
 
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Event Date *
+                <label className="block font-semibold mb-2">
+                  Event Date
                 </label>
 
                 <input
-                  type="date"
+                  type="text"
                   value={newActivity.date}
                   onChange={(e) =>
                     setNewActivity({
@@ -774,22 +863,23 @@ function IICDashboard() {
                       date: e.target.value,
                     })
                   }
-                  className="w-full border border-gray-300 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Example: 16 Aug 2026"
+                  className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
                 />
 
               </div>
 
-              {/* Faculty */}
+
+              {/* FACULTY */}
 
               <div>
 
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Conducted By / Faculty Coordinator *
+                <label className="block font-semibold mb-2">
+                  Faculty / Coordinator
                 </label>
 
                 <input
                   type="text"
-                  placeholder="Enter faculty name"
                   value={newActivity.coordinator}
                   onChange={(e) =>
                     setNewActivity({
@@ -797,20 +887,23 @@ function IICDashboard() {
                       coordinator: e.target.value,
                     })
                   }
-                  className="w-full border border-gray-300 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter faculty name"
+                  className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
                 />
 
               </div>
 
-              {/* Department */}
+
+              {/* DEPARTMENT */}
 
               <div>
 
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Department *
+                <label className="block font-semibold mb-2">
+                  Department
                 </label>
 
-                <select
+                <input
+                  type="text"
                   value={newActivity.department}
                   onChange={(e) =>
                     setNewActivity({
@@ -818,397 +911,64 @@ function IICDashboard() {
                       department: e.target.value,
                     })
                   }
-                  className="w-full border border-gray-300 rounded-xl p-3 bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Example: MCA"
+                  className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+
+              </div>
+
+
+              {/* STATUS */}
+
+              <div>
+
+                <label className="block font-semibold mb-2">
+                  Status
+                </label>
+
+                <select
+                  value={newActivity.status}
+                  onChange={(e) =>
+                    setNewActivity({
+                      ...newActivity,
+                      status: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-xl px-4 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500"
                 >
 
-                  <option value="">
-                    Select Department
+                  <option value="Upcoming">
+                    Upcoming
                   </option>
 
-                  <option value="MCA">
-                    MCA
-                  </option>
-
-                  <option value="MBA">
-                    MBA
-                  </option>
-
-                  <option value="CSE">
-                    CSE
-                  </option>
-
-                  <option value="CSE-AIML">
-                    CSE-AIML
-                  </option>
-
-                  <option value="Basic Science">
-                    Basic Science
+                  <option value="Completed">
+                    Completed
                   </option>
 
                 </select>
 
               </div>
 
-              {/* Report Link */}
-
-              <div>
-
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Google Drive Report Link
-                </label>
-
-                <input
-                  type="url"
-                  placeholder="https://drive.google.com/..."
-                  value={newActivity.reportLink}
-                  onChange={(e) =>
-                    setNewActivity({
-                      ...newActivity,
-                      reportLink: e.target.value,
-                    })
-                  }
-                  className="w-full border border-gray-300 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-
-                <p className="text-xs text-gray-500 mt-2">
-                  Paste the Google Drive link of the event report.
-                </p>
-
-              </div>
-
-              {/* Video Link */}
-
-              <div>
-
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Google Drive Event Video Link
-                </label>
-
-                <input
-                  type="url"
-                  placeholder="https://drive.google.com/..."
-                  value={newActivity.videoLink}
-                  onChange={(e) =>
-                    setNewActivity({
-                      ...newActivity,
-                      videoLink: e.target.value,
-                    })
-                  }
-                  className="w-full border border-gray-300 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-
-                <p className="text-xs text-gray-500 mt-2">
-                  Paste the Google Drive link of the event video.
-                </p>
-
-              </div>
-
-              {/* Buttons */}
-
-              <div className="flex gap-3 pt-3">
-
-                <button
-                  onClick={() =>
-                    setShowAddModal(false)
-                  }
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-xl font-semibold transition"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={handleAddActivity}
-                  className="flex-1 bg-blue-700 hover:bg-blue-800 text-white py-3 rounded-xl font-semibold transition"
-                >
-                  Add Activity
-                </button>
-
-              </div>
-
             </div>
 
-          </div>
 
-        </div>
-
-      )}
-
-      {/* ======================================
-          ACTIVITY DETAILS MODAL
-      ====================================== */}
-
-      {selectedActivity && (
-
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-5">
-
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-
-            {/* Header */}
-
-            <div className="bg-gradient-to-r from-blue-700 to-indigo-700 text-white p-7 rounded-t-3xl">
-
-              <div className="flex justify-between items-start gap-4">
-
-                <div>
-
-                  <p className="text-blue-200 text-sm">
-                    IIC Activity
-                  </p>
-
-                  <h2 className="text-2xl md:text-3xl font-bold mt-1">
-                    {selectedActivity.title}
-                  </h2>
-
-                </div>
-
-                <span
-                  className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
-                    selectedActivity.status === "Completed"
-                      ? "bg-green-500"
-                      : "bg-orange-500"
-                  }`}
-                >
-                  {selectedActivity.status}
-                </span>
-
-              </div>
-
-            </div>
-
-            {/* Details */}
-
-            <div className="p-7 space-y-6">
-
-              {/* Information */}
-
-              <div className="grid md:grid-cols-2 gap-4">
-
-                <div className="bg-gray-50 rounded-xl p-5">
-
-                  <p className="text-sm text-gray-500">
-                    Event Date
-                  </p>
-
-                  <p className="text-lg font-semibold text-gray-800 mt-1">
-                    {selectedActivity.date}
-                  </p>
-
-                </div>
-
-                <div className="bg-gray-50 rounded-xl p-5">
-
-                  <p className="text-sm text-gray-500">
-                    Department
-                  </p>
-
-                  <p className="text-lg font-semibold text-gray-800 mt-1">
-                    {selectedActivity.department}
-                  </p>
-
-                </div>
-
-                <div className="bg-gray-50 rounded-xl p-5 md:col-span-2">
-
-                  <p className="text-sm text-gray-500">
-                    Conducted By / Faculty Coordinator
-                  </p>
-
-                  <p className="text-lg font-semibold text-gray-800 mt-1">
-                    {selectedActivity.coordinator}
-                  </p>
-
-                </div>
-
-              </div>
-
-              {/* ==================================
-                  REPORT
-              ================================== */}
-
-              <div className="border rounded-2xl p-5">
-
-                <div className="mb-4">
-
-                  <h3 className="text-lg font-bold text-gray-800">
-                    📄 Event Report
-                  </h3>
-
-                  <p className="text-sm text-gray-500 mt-1">
-                    Google Drive report
-                  </p>
-
-                </div>
-
-                {selectedActivity.reportLink ? (
-
-                  <div className="flex flex-wrap gap-3">
-
-                    <a
-                      href={selectedActivity.reportLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-semibold transition"
-                    >
-                      View Report
-                    </a>
-
-                    <button
-                      onClick={() =>
-                        handleUpdateReport(
-                          selectedActivity.id
-                        )
-                      }
-                      className="bg-yellow-500 hover:bg-yellow-600 text-white px-5 py-2 rounded-xl font-semibold transition"
-                    >
-                      Change Report Link
-                    </button>
-
-                  </div>
-
-                ) : (
-
-                  <div>
-
-                    <p className="text-orange-600 bg-orange-50 rounded-xl px-4 py-3 mb-3">
-                      Report has not been added yet.
-                    </p>
-
-                    <button
-                      onClick={() =>
-                        handleUpdateReport(
-                          selectedActivity.id
-                        )
-                      }
-                      className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-xl font-semibold transition"
-                    >
-                      + Add Report Link
-                    </button>
-
-                  </div>
-
-                )}
-
-              </div>
-
-              {/* ==================================
-                  VIDEO
-              ================================== */}
-
-              <div className="border rounded-2xl p-5">
-
-                <div className="mb-4">
-
-                  <h3 className="text-lg font-bold text-gray-800">
-                    🎥 Event Video
-                  </h3>
-
-                  <p className="text-sm text-gray-500 mt-1">
-                    Google Drive event video
-                  </p>
-
-                </div>
-
-                {selectedActivity.videoLink ? (
-
-                  <div className="flex flex-wrap gap-3">
-
-                    <a
-                      href={selectedActivity.videoLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-xl font-semibold transition"
-                    >
-                      🎥 View Event Video
-                    </a>
-
-                    <button
-                      onClick={() =>
-                        handleUpdateVideo(
-                          selectedActivity.id
-                        )
-                      }
-                      className="bg-yellow-500 hover:bg-yellow-600 text-white px-5 py-2 rounded-xl font-semibold transition"
-                    >
-                      Change Video Link
-                    </button>
-
-                  </div>
-
-                ) : (
-
-                  <div>
-
-                    <p className="text-orange-600 bg-orange-50 rounded-xl px-4 py-3 mb-3">
-                      Event video has not been added yet.
-                    </p>
-
-                    <button
-                      onClick={() =>
-                        handleUpdateVideo(
-                          selectedActivity.id
-                        )
-                      }
-                      className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-xl font-semibold transition"
-                    >
-                      + Add Video Link
-                    </button>
-
-                  </div>
-
-                )}
-
-              </div>
-
-              {/* ==================================
-                  ACTIONS
-              ================================== */}
-
-              <div className="space-y-3">
-
-                {selectedActivity.status === "Upcoming" && (
-
-                  <button
-                    onClick={() =>
-                      handleMarkCompleted(
-                        selectedActivity.id
-                      )
-                    }
-                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-semibold transition"
-                  >
-                    ✅ Mark Activity as Completed
-                  </button>
-
-                )}
-
-                {selectedActivity.status === "Completed" && (
-
-                  <div className="w-full bg-green-100 text-green-700 py-3 rounded-xl text-center font-semibold">
-                    ✔ Activity Completed
-                  </div>
-
-                )}
-
-                <button
-                  onClick={() =>
-                    handleDeleteActivity(
-                      selectedActivity.id
-                    )
-                  }
-                  className="w-full bg-red-100 hover:bg-red-200 text-red-700 py-3 rounded-xl font-semibold transition"
-                >
-                  🗑 Delete Activity
-                </button>
-
-                <button
-                  onClick={() =>
-                    setSelectedActivity(null)
-                  }
-                  className="w-full bg-blue-700 hover:bg-blue-800 text-white py-3 rounded-xl font-semibold transition"
-                >
-                  Close
-                </button>
-
-              </div>
+            {/* BUTTONS */}
+
+            <div className="flex gap-4 mt-8">
+
+              <button
+                onClick={addActivity}
+                className="flex-1 bg-blue-700 hover:bg-blue-800 text-white py-3 rounded-xl font-semibold"
+              >
+                Add Activity
+              </button>
+
+              <button
+                onClick={() => setShowAddActivity(false)}
+                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-semibold"
+              >
+                Cancel
+              </button>
 
             </div>
 
