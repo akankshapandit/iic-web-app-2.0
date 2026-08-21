@@ -121,7 +121,46 @@ export const generateReport = async (req, res) => {
       title, faculty, date, description, mode, venue, startTime, endTime, category, theme, speakerDetails, participants, organizingTeam 
     } = req.body;
     
-    // Process photos
+    // Process poster
+    let posterUrl = null;
+    if (req.files && req.files.poster) {
+      let posterFile = req.files.poster;
+      if (Array.isArray(posterFile)) posterFile = posterFile[0];
+      const ext = path.extname(posterFile.name) || '.jpg';
+      const filename = `poster_${Date.now()}${ext}`;
+      const filepath = path.join(process.cwd(), 'uploads', 'photos', filename);
+      await posterFile.mv(filepath);
+      posterUrl = `http://localhost:3000/uploads/photos/${filename}`;
+    }
+
+    // Process attendance sheets
+    let attendanceUrls = [];
+    if (req.files && req.files.attendanceSheets) {
+      let files = req.files.attendanceSheets;
+      if (!Array.isArray(files)) files = [files];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const ext = path.extname(file.name) || '.jpg';
+        const filename = `attendance_${Date.now()}_${i}${ext}`;
+        const filepath = path.join(process.cwd(), 'uploads', 'photos', filename);
+        await file.mv(filepath);
+        attendanceUrls.push(`http://localhost:3000/uploads/photos/${filename}`);
+      }
+    }
+
+    // Process feedback screenshot
+    let feedbackScreenshotUrl = null;
+    if (req.files && req.files.feedbackScreenshot) {
+      let fbFile = req.files.feedbackScreenshot;
+      if (Array.isArray(fbFile)) fbFile = fbFile[0];
+      const ext = path.extname(fbFile.name) || '.jpg';
+      const filename = `feedback_ss_${Date.now()}${ext}`;
+      const filepath = path.join(process.cwd(), 'uploads', 'photos', filename);
+      await fbFile.mv(filepath);
+      feedbackScreenshotUrl = `http://localhost:3000/uploads/photos/${filename}`;
+    }
+
+    // Process photos for collage
     let uploadedPhotos = [];
     if (req.files && req.files.photos) {
       let files = req.files.photos;
@@ -148,19 +187,35 @@ export const generateReport = async (req, res) => {
       photoUrls = uploadedPhotos.map(p => `http://localhost:3000/uploads/photos/${path.basename(p)}`);
     }
 
-    const prompt = `You are a professional report writer for AICTE IIC.
-We have an event titled: "${title}"
-Description/Context provided: "${description}"
+    // Faculty-entered Brief Description is the raw source of truth and MUST bypass AI generation completely
+    const rawFacultyBrief = (description && typeof description === 'string' && description.trim()) ? description.trim() : "N/A";
 
-Analyze the context and generate a detailed, highly professional report for this event. 
-Return ONLY a valid JSON object (without markdown \`\`\` wrappers) containing exactly these 5 keys:
-- "objective": (string) The core objective of this activity in 2-3 sentences.
-- "generatedSummary": (string) A comprehensive, multi-paragraph brief description of the event.
-- "highlights": (string) Key takeaways, major activities, or bullet points summarizing the highlights.
-- "outcomes": (string) The measurable or observed outcomes, skills gained, or future impacts.
-- "feedback": (string) A summary of participant feedback, reflections, or overall reception.
+    const prompt = `You are a Senior Report Writer for official AICTE-IIC Activity Reports.
 
-Make the language professional, academic, and suited for a formal AICTE IIC Activity Report.`;
+Given the following Event Metadata & Context:
+- Event Title: "${title}"
+- Date: "${date}"
+- Time: "${startTime || 'N/A'}" to "${endTime || 'N/A'}"
+- Mode: "${mode || 'Offline'}"
+- Venue / Platform: "${venue || 'N/A'}"
+- Activity Category: "${category}"
+- Activity Led By: "${faculty}"
+- Theme: "${theme}"
+- Number of Participants: "${participants || 'N/A'}"
+- Expert / Speaker Details: "${speakerDetails || 'N/A'}"
+- User-provided Brief Description: "${rawFacultyBrief}"
+
+STRICT GUIDELINES FOR AI GENERATION (Generate ONLY the Objective field):
+
+1. "objective": (string)
+   - Must briefly explain: (a) Purpose of the activity, and (b) Why the activity was organized by the institution.
+   - Length: Strictly maximum 4–5 lines.
+   - Tone: Professional, academic, formal AICTE/IIC report tone.
+
+Return ONLY a valid JSON object without markdown wrappers or code blocks (\`\`\`json ... \`\`\`):
+{
+  "objective": "string"
+}`;
 
     const result = await generateWithModelChain(reportTextModels(), (model) => model.generateContent(prompt));
     
@@ -172,13 +227,13 @@ Make the language professional, academic, and suited for a formal AICTE IIC Acti
     } catch (e) {
       console.warn("Failed to parse Gemini JSON, falling back.", e);
       generatedData = {
-        generatedSummary: cleanJsonText,
-        objective: "Please edit manually.",
-        highlights: "Please edit manually.",
-        outcomes: "Please edit manually.",
-        feedback: "Please edit manually."
+        objective: "Please edit manually."
       };
     }
+    
+    // MANDATORY REQUIREMENT: Set generatedSummary directly to the exact faculty-entered brief.
+    // Do NOT generate, rewrite, summarize, paraphrase, or enhance with AI.
+    generatedData.generatedSummary = rawFacultyBrief;
     
     const score = 95;
 
@@ -197,11 +252,11 @@ Make the language professional, academic, and suited for a formal AICTE IIC Acti
       participants: participants || "",
       organizingTeam: organizingTeam || "",
       objective: generatedData.objective || "",
-      description: description || "No description provided",
+      description: rawFacultyBrief,
       highlights: generatedData.highlights || "",
       outcomes: generatedData.outcomes || "",
       feedback: generatedData.feedback || "",
-      generatedText: generatedData.generatedSummary || "",
+      generatedText: rawFacultyBrief,
       score,
       photos: photoUrls,
       collageUrl
@@ -211,10 +266,34 @@ Make the language professional, academic, and suited for a formal AICTE IIC Acti
     res.json({ 
       reportId: newReport._id,
       reportData: generatedData,
-      report: generatedData.generatedSummary, 
+      report: rawFacultyBrief, 
       score,
+      posterUrl,
       collageUrl,
-      photos: photoUrls
+      photos: photoUrls,
+      attendanceUrls,
+      feedbackScreenshotUrl,
+      feedbackLink: req.body.feedbackLink || "",
+      registrationLink: req.body.registrationLink || "",
+      keyOutputs: req.body.keyOutputs || "",
+      kpis: req.body.kpis || "",
+      videoUrl: req.body.videoUrl || "",
+      socialMedia: {
+        twitter: req.body.twitterUrl || "",
+        facebook: req.body.facebookUrl || "",
+        instagram: req.body.instagramUrl || "",
+        linkedIn: req.body.linkedInUrl || "",
+        videoUrl: req.body.videoUrl || ""
+      },
+      additionalInfo: {
+        speakerMobile: req.body.speakerMobile || "",
+        speakerEmailOrLinkedIn: req.body.speakerEmailOrLinkedIn || "",
+        studentParticipants: req.body.studentParticipants || "",
+        facultyParticipants: req.body.facultyParticipants || "",
+        externalParticipants: req.body.externalParticipants || "0",
+        organizerName: req.body.organizerName || "",
+        organizerMobile: req.body.organizerMobile || ""
+      }
     });
   } catch (err) {
     console.error("Report Generation Error:", err);
@@ -288,5 +367,92 @@ export const auditPDFFile = async (req, res) => {
     }
     console.error("[PDF audit]", err.message || err);
     res.status(500).json({ error: "PDF Audit failed: " + err.message });
+  }
+};
+
+// --- FEATURE 3: EXTRACT METADATA FROM EVENT POSTER ---
+export const extractPosterMetadata = async (req, res) => {
+  try {
+    const posterFile = req.files?.poster || req.files?.file || req.files?.image;
+    if (!posterFile) {
+      return res.status(400).json({ error: "Please upload an event poster (image or PDF file)." });
+    }
+
+    const mimeType = posterFile.mimetype || "image/jpeg";
+    const dataBuffer = posterFile.data;
+
+    const posterPrompt = `
+      You are an expert OCR and Vision AI system specializing in extracting event details from academic/institutional event posters, flyers, and banners.
+      Analyze the attached event poster image or PDF document.
+      Extract the following information accurately:
+      1. Event Title: Full official title of the event / session / workshop / seminar (e.g. "6th Anniversary of National Education Policy (NEP) 2020").
+      2. Date: Full date string (e.g. "29 July 2026"), and separate Day ("29"), Month ("July"), Year ("2026"). Also provide ISO format "YYYY-MM-DD" (e.g. "2026-07-29").
+      3. Start Time: e.g. "2:00 PM" or "14:00"
+      4. End Time: e.g. "4:00 PM" or "16:00"
+      5. Complete Venue: Complete location, hall, floor, building, street, landmark, area, city, pin code (e.g. "AV Hall, 2nd Floor, D Block, #132, AECS Layout, ITPL Main Road, Kundalahalli, Bangalore - 560037").
+      6. Expert / Resource Person:
+         - Name: (e.g. "Dr. Shreekanth M. Prabhu")
+         - Designation: (e.g. "Professor & Head, Department of CSE")
+         - Organization: (e.g. "Cambridge Institute of Technology, Bengaluru")
+
+      Return ONLY a valid JSON object without markdown wrappers or code fences (\`\`\`json ... \`\`\`):
+      {
+        "title": "string",
+        "date": "YYYY-MM-DD",
+        "dateFormatted": "string",
+        "day": "string",
+        "month": "string",
+        "year": "string",
+        "startTime": "string",
+        "endTime": "string",
+        "venue": "string",
+        "speakerName": "string",
+        "speakerDesignation": "string",
+        "speakerOrganization": "string",
+        "speakerDetails": "string",
+        "faculty": "string"
+      }
+    `;
+
+    const parts = [
+      {
+        inlineData: {
+          data: dataBuffer.toString("base64"),
+          mimeType: mimeType,
+        },
+      },
+      posterPrompt,
+    ];
+
+    const result = await generateWithModelChain(pdfAuditModels(), (model) => model.generateContent(parts));
+    const responseText = result.response.text();
+    const cleanJson = responseText.replace(/```json|```/gi, "").trim();
+
+    try {
+      const parsedJson = JSON.parse(cleanJson);
+      
+      // Auto-construct speakerDetails format if separate
+      if (!parsedJson.speakerDetails && (parsedJson.speakerName || parsedJson.speakerDesignation || parsedJson.speakerOrganization)) {
+        parsedJson.speakerDetails = [
+          parsedJson.speakerName ? `Name: ${parsedJson.speakerName}` : "",
+          parsedJson.speakerDesignation ? `Designation: ${parsedJson.speakerDesignation}` : "",
+          parsedJson.speakerOrganization ? `Organization: ${parsedJson.speakerOrganization}` : ""
+        ].filter(Boolean).join("\n");
+      }
+      if (!parsedJson.faculty && parsedJson.speakerName) {
+        parsedJson.faculty = parsedJson.speakerName;
+      }
+      
+      return res.json(parsedJson);
+    } catch (e) {
+      console.warn("[Poster Extract] Model did not return valid JSON", responseText, e);
+      return res.status(502).json({
+        error: "The AI could not format extraction results. Please re-try or choose another file.",
+        rawText: responseText
+      });
+    }
+  } catch (err) {
+    console.error("[Poster Extract Error]", err);
+    return res.status(500).json({ error: "Poster extraction failed: " + err.message });
   }
 };

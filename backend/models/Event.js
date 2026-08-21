@@ -12,8 +12,12 @@ const eventSchema = new mongoose.Schema(
     category: { type: String, default: "Workshop" },
     message: { type: String, default: "" },
     status: { type: String, default: "Planned" },
+    level: { type: String, default: "" },
+    isCelebration: { type: Boolean, default: false },
     autoReminder: { type: Boolean, default: false },
     reminderSent: { type: Boolean, default: false },
+    addedDayReminderSent: { type: Boolean, default: false },
+    threeWeekReminderSent: { type: Boolean, default: false },
     lastReminderDate: { type: Date, default: null },
   },
   { timestamps: true }

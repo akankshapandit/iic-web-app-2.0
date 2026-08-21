@@ -70,6 +70,111 @@ export const createEvent = async (req, res) => {
     });
 
     await newEvent.save();
+
+    // Trigger initial notification on the day event is added to calendar if faculty email is assigned
+    if (newEvent.facultyEmail && typeof newEvent.facultyEmail === "string" && newEvent.facultyEmail.trim()) {
+      try {
+        const mailClient = await getTransporter();
+        const { transporter, fromEmail } = mailClient;
+        const eventDateStr = new Date(newEvent.date).toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        const eventTimeStr = newEvent.time || "10:00 AM";
+        const customMessage = newEvent.message && newEvent.message.trim()
+          ? newEvent.message.trim()
+          : "You have been assigned as the coordinating faculty for this event added to the calendar.";
+
+        const mailOptions = {
+          from: `"CMRIT IIC Admin" <${fromEmail}>`,
+          to: newEvent.facultyEmail.trim(),
+          subject: `New Calendar Event Assigned: ${newEvent.title} - ${eventDateStr}`,
+          text: `Dear ${newEvent.facultyName || "Faculty Member"},\n\nThis is an official notification to inform you that you have been assigned to an event added to the calendar:\n\nEvent Name: ${newEvent.title}\nCategory: ${newEvent.category || "Workshop"}\nDate: ${eventDateStr}\nTime: ${eventTimeStr}\n\nNote / Description:\n${customMessage}\n\nPlease ensure all preparations are complete.\n\nBest regards,\nCMRIT IIC Admin Team`,
+          html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f4f6f9; color: #333333;">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 20px 0;">
+                <tr>
+                  <td align="center">
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
+                      <tr>
+                        <td style="background-color: #1e3a8a; padding: 25px 30px; text-align: left;">
+                          <h1 style="color: #ffffff; font-size: 20px; font-weight: 700; margin: 0;">CMRIT Institution's Innovation Council</h1>
+                          <p style="color: #93c5fd; font-size: 13px; margin: 5px 0 0 0; text-transform: uppercase; font-weight: 600;">Faculty Event Assignment Notification</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 30px 30px 15px 30px;">
+                          <p style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 10px 0;">Dear ${newEvent.facultyName || "Faculty Member"},</p>
+                          <p style="font-size: 14px; color: #475569; line-height: 1.6; margin: 0;">
+                            This is an official notification to inform you that you have been assigned to an event added to the CMRIT calendar today.
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 0 30px 20px 30px;">
+                          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 15px;">
+                            <tr>
+                              <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; width: 30%;">Event Title:</td>
+                              <td style="padding: 8px 12px; font-size: 14px; font-weight: 700; color: #0f172a;">${newEvent.title}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Date:</td>
+                              <td style="padding: 8px 12px; font-size: 14px; font-weight: 600; color: #2563eb; border-top: 1px solid #e2e8f0;">📅 ${eventDateStr}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Time:</td>
+                              <td style="padding: 8px 12px; font-size: 14px; font-weight: 600; color: #d97706; border-top: 1px solid #e2e8f0;">⏰ ${eventTimeStr}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Category:</td>
+                              <td style="padding: 8px 12px; font-size: 14px; color: #334155; border-top: 1px solid #e2e8f0;">🏷️ ${newEvent.category || "Workshop"}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 0 30px 25px 30px;">
+                          <div style="background-color: #eff6ff; border-left: 4px solid #2563eb; padding: 15px; border-radius: 4px;">
+                            <h4 style="margin: 0 0 6px 0; font-size: 13px; text-transform: uppercase; color: #1e40af; font-weight: 700;">Personalized Event Note:</h4>
+                            <p style="margin: 0; font-size: 14px; color: #1e3a8a; line-height: 1.5; font-style: italic;">
+                              "${customMessage}"
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 20px 30px; background-color: #f1f5f9; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center;">
+                          <p style="margin: 0 0 4px 0; font-weight: 600;">CMR Institute of Technology - IIC Admin Office</p>
+                          <p style="margin: 0;">This is an automated operational notification.</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
+          `,
+        };
+
+        await transporter.sendMail(mailOptions);
+        newEvent.addedDayReminderSent = true;
+        newEvent.lastReminderDate = new Date();
+        await newEvent.save();
+        console.log(`[Event Creation] Initial email sent to ${newEvent.facultyEmail} for event "${newEvent.title}"`);
+      } catch (emailErr) {
+        console.error("[Event Creation] Failed to send creation email:", emailErr.message);
+      }
+    }
+
     res.status(201).json({ message: "Event created successfully", event: newEvent });
   } catch (error) {
     console.error("createEvent Error:", error);
@@ -180,7 +285,7 @@ export const sendManualReminder = async (req, res) => {
       to: event.facultyEmail.trim(),
       subject: `Reminder: ${event.title} - ${eventDateStr} at ${eventTimeStr}`,
       // Plain text fallback (critical for passing Gmail spam & promotions filters)
-      text: `Dear ${event.facultyName || "Faculty Member"},\n\nThis is an official reminder regarding your assigned event:\n\nEvent Name: ${event.title}\nCategory: ${event.category || "Workshop"}\nDate: ${eventDateStr}\nTime: ${eventTimeStr}\nVenue: ${event.venue || "TBD"}\nDepartment: ${event.department || "General"}\n\nNote / Description:\n${customMessage}\n\nPlease ensure all preparations are complete.\n\nBest regards,\nCMRIT IIC Admin Team`,
+      text: `Dear ${event.facultyName || "Faculty Member"},\n\nThis is an official reminder regarding your assigned event:\n\nEvent Name: ${event.title}\nCategory: ${event.category || "Workshop"}\nDate: ${eventDateStr}\nTime: ${eventTimeStr}\n\nNote / Description:\n${customMessage}\n\nPlease ensure all preparations are complete.\n\nBest regards,\nCMRIT IIC Admin Team`,
       // Clean, professional HTML layout matching standard Inbox design guidelines
       html: `
         <!DOCTYPE html>
@@ -228,14 +333,6 @@ export const sendManualReminder = async (req, res) => {
                         <tr>
                           <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Time:</td>
                           <td style="padding: 8px 12px; font-size: 14px; font-weight: 600; color: #d97706; border-top: 1px solid #e2e8f0;">⏰ ${eventTimeStr}</td>
-                        </tr>
-                        <tr>
-                          <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Venue:</td>
-                          <td style="padding: 8px 12px; font-size: 14px; color: #334155; border-top: 1px solid #e2e8f0;">📍 ${event.venue || "TBD"}</td>
-                        </tr>
-                        <tr>
-                          <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Department:</td>
-                          <td style="padding: 8px 12px; font-size: 14px; color: #334155; border-top: 1px solid #e2e8f0;">🏢 ${event.department || "General"}</td>
                         </tr>
                         <tr>
                           <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Category:</td>
@@ -359,5 +456,147 @@ export const getDashboardStats = async (req, res) => {
   } catch (error) {
     console.error("getDashboardStats Error:", error);
     res.status(500).json({ message: "Failed to fetch stats", error: error.message });
+  }
+};
+
+export const deleteEvent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedEvent = await Event.findByIdAndDelete(id);
+    if (!deletedEvent) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+    res.status(200).json({ message: "Event deleted successfully", id });
+  } catch (error) {
+    console.error("deleteEvent Error:", error);
+    res.status(500).json({ message: "Failed to delete event", error: error.message });
+  }
+};
+
+const parseDDMMYYYYDate = (raw) => {
+  if (!raw) return null;
+  const str = String(raw).trim();
+  if (!str) return null;
+
+  // Explicit DD-MM-YYYY parsing (Day = parts[0], Month = parts[1], Year = parts[2])
+  const parts = str.split(/[-/.]/);
+  if (parts.length >= 3) {
+    const p1 = parseInt(parts[0], 10);
+    const p2 = parseInt(parts[1], 10);
+    const p3 = parseInt(parts[2], 10);
+
+    // If p3 is 4-digit year e.g. "15-10-2025" -> Day=p1, Month=p2, Year=p3
+    if (!isNaN(p1) && !isNaN(p2) && !isNaN(p3) && p3 > 1000) {
+      return new Date(Date.UTC(p3, p2 - 1, p1));
+    }
+
+    // If p1 is 4-digit year e.g. "2025-10-15" -> Year=p1, Month=p2, Day=p3
+    if (!isNaN(p1) && !isNaN(p2) && !isNaN(p3) && p1 > 1000) {
+      return new Date(Date.UTC(p1, p2 - 1, p3));
+    }
+  }
+
+  const d = new Date(str);
+  return !isNaN(d.getTime()) ? d : null;
+};
+
+export const celebrationBulkUpload = async (req, res) => {
+  try {
+    const rows = req.body;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ message: "Invalid celebration event data provided" });
+    }
+
+    let importedCount = 0;
+    const invalidRows = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const rawRow = rows[i];
+      if (!rawRow || typeof rawRow !== "object") continue;
+
+      // Normalize row keys to lower case
+      const row = {};
+      Object.keys(rawRow).forEach((key) => {
+        row[key.trim().toLowerCase()] = rawRow[key];
+      });
+
+      const title = (
+        row["activity title"] ||
+        row["activity_title"] ||
+        row["title"] ||
+        row["activity"] ||
+        row["event title"] ||
+        row["event_title"] ||
+        row["event"] ||
+        row["name"] ||
+        row["celebration"] ||
+        ""
+      ).trim();
+
+      const rawDate =
+        row["date"] ||
+        row["event date"] ||
+        row["event_date"] ||
+        row["activity date"] ||
+        row["start date"] ||
+        row["date (yyyy-mm-dd)"] ||
+        row["date(yyyy-mm-dd)"];
+
+      if (!title || !rawDate) {
+        invalidRows.push({ rowIndex: i + 1, row: rawRow, reason: "Missing required Title or Date" });
+        continue;
+      }
+
+      const parsedDate = parseDDMMYYYYDate(rawDate);
+      if (!parsedDate || isNaN(parsedDate.getTime())) {
+        invalidRows.push({ rowIndex: i + 1, row: rawRow, reason: `Unparseable Date: "${rawDate}"` });
+        continue;
+      }
+
+      const statusVal = (row["status"] || row["state"] || "Active").trim();
+      const levelVal = (row["level"] || row["tier"] || row["category"] || "").trim();
+
+      const startOfDay = new Date(parsedDate);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const endOfDay = new Date(parsedDate);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+
+      const existing = await Event.findOne({
+        title: { $regex: new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+        date: { $gte: startOfDay, $lte: endOfDay },
+      });
+
+      if (existing) {
+        existing.status = statusVal;
+        existing.level = levelVal;
+        existing.category = "Celebration Event";
+        existing.isCelebration = true;
+        await existing.save();
+        importedCount++;
+      } else {
+        await Event.create({
+          title,
+          date: parsedDate,
+          status: statusVal,
+          level: levelVal,
+          category: "Celebration Event",
+          isCelebration: true,
+          department: "General",
+          venue: "Main Campus",
+          facultyName: "Event Coordinator",
+        });
+        importedCount++;
+      }
+    }
+
+    res.status(201).json({
+      message: `${importedCount} Celebration Events imported successfully.`,
+      imported: importedCount,
+      invalidCount: invalidRows.length,
+      invalidRows,
+    });
+  } catch (error) {
+    console.error("celebrationBulkUpload Error:", error);
+    res.status(500).json({ message: "Failed to upload celebration events", error: error.message });
   }
 };

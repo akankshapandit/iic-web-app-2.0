@@ -5,7 +5,9 @@ import {
   bulkUpload,
   updateReminderSettings,
   sendManualReminder,
-  getDashboardStats
+  getDashboardStats,
+  deleteEvent,
+  celebrationBulkUpload
 } from "../controllers/eventController.js";
 
 const router = express.Router();
@@ -13,8 +15,10 @@ const router = express.Router();
 router.get("/", getEvents);
 router.post("/", createEvent);
 router.post("/bulk", bulkUpload);
+router.post("/celebration-bulk", celebrationBulkUpload);
 router.put("/:id/settings", updateReminderSettings);
 router.post("/:id/manual-reminder", sendManualReminder);
 router.get("/dashboard-stats", getDashboardStats);
+router.delete("/:id", deleteEvent);
 
 export default router;
