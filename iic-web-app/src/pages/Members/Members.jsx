@@ -1,13 +1,39 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import MemberLoginModal from "./MemberLoginModal";
+
+// ===== IMPORT IMAGES =====
+import shyam from "../../assets/images/shyam.png";
+import vakula from "../../assets/images/vakula.jpg";
+import seetha from "../../assets/images/seetha.jpg";
+import viji from "../../assets/images/viji.jpg";
+import chitra from "../../assets/images/chitra.jpg";
+import praveen from "../../assets/images/praveen.jpg";
+
+import lynsha from "../../assets/images/lynsha.png";
+import komala from "../../assets/images/komala.png";
+import chandrike from "../../assets/images/chandrika.png";
+import rajesh from "../../assets/images/rajesh.png";
+import novby from "../../assets/images/novby.png";
+
+import sam from "../../assets/images/sam.png";
+import sridevi from "../../assets/images/sridevi.png";
+import keka from "../../assets/images/keka.png";
+import satyabrata from "../../assets/images/satyabrata.png";
+import naveen from "../../assets/images/naveen.png";
+import momita from "../../assets/images/momita.png";
+
+import meenakshi from "../../assets/images/meenakshi.png";
+import gomathi from "../../assets/images/gomathi.png";
+import pappa from "../../assets/images/pappa.png";
+import fazlur from "../../assets/images/fazlur.png";
+import kashif from "../../assets/images/kashif.png";
 
 function Members() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const { memberUser, logoutMember } = useAuth();
-  const navigate = useNavigate();
 
   const members = [
     { name: "Dr. Shyam P Joy", role: "Chair Person", image: shyam },
@@ -75,6 +101,7 @@ function Members() {
         </div>
       </div>
 
+      {/* Grid of Members */}
       <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
         {members.map((member, index) => (
           <motion.div
@@ -94,10 +121,12 @@ function Members() {
             </div>
 
             <h2 className="font-semibold text-gray-800">{member.name}</h2>
-
             <p className="text-sm text-gray-500 mt-1">{member.role}</p>
           </motion.div>
         ))}
+      </div>
+
+      {/* Member Login Modal */}
       <MemberLoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
