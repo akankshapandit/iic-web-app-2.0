@@ -18,6 +18,7 @@ import IPRCellMembers from "../pages/IPRCell/IPRCellMembers";
 import StudentStartUps from "../pages/Startups/StudentStartUps";
 import FacultyStartups from "../pages/Startups/FacultyStartups";
 import Members from "../pages/Members/Members";
+import MemberDashboard from "../pages/Members/MemberDashboard";
 import KSCSTIPCellReport from "../pages/IPRCell/KSCSTIPCellReport";
 import DepartmentLogin from "../pages/IECell/DepartmentLogin";
 import DepartmentDashboard from "../pages/IECell/DepartmentDashboard";
@@ -42,6 +43,7 @@ function AppRoutes() {
       <Route path="/startups" element={<StudentStartUps />} />
       <Route path="/faculty-startups" element={<FacultyStartups />} />
       <Route path="/members" element={<Members />} />
+      <Route path="/member-dashboard" element={<MemberDashboard />} />
       <Route path="/ipr-members" element={<IPRCellMembers />} />
       <Route path="/ipr-reports" element={<KSCSTIPCellReport />} />
       <Route path="/ipr-activities" element={<IPRActivities />} />

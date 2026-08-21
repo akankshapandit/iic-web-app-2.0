@@ -1,34 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
-
-// ===== IMPORT IMAGES =====
-import shyam from "../../assets/images/shyam.png";
-import vakula from "../../assets/images/vakula.jpg";
-import seetha from "../../assets/images/seetha.jpg";
-import viji from "../../assets/images/viji.jpg";
-import chitra from "../../assets/images/chitra.jpg";
-import praveen from "../../assets/images/praveen.jpg";
-
-import lynsha from "../../assets/images/lynsha.png";
-import komala from "../../assets/images/komala.png";
-import chandrike from "../../assets/images/chandrika.png";
-import rajesh from "../../assets/images/rajesh.png";
-import novby from "../../assets/images/novby.png";
-
-import sam from "../../assets/images/sam.png";
-import sridevi from "../../assets/images/sridevi.png";
-import keka from "../../assets/images/keka.png";
-import satyabrata from "../../assets/images/satyabrata.png";
-import naveen from "../../assets/images/naveen.png";
-import momita from "../../assets/images/momita.png";
-
-import meenakshi from "../../assets/images/meenakshi.png";
-import gomathi from "../../assets/images/gomathi.png";
-import pappa from "../../assets/images/pappa.png";
-import fazlur from "../../assets/images/fazlur.png";
-import kashif from "../../assets/images/kashif.png";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import MemberLoginModal from "./MemberLoginModal";
 
 function Members() {
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const { memberUser, logoutMember } = useAuth();
+  const navigate = useNavigate();
+
   const members = [
     { name: "Dr. Shyam P Joy", role: "Chair Person", image: shyam },
     { name: "Dr. Vakula Rani J", role: "President", image: vakula },
@@ -59,13 +39,41 @@ function Members() {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
-      <motion.h1
-        initial={{ opacity: 0, y: -30 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-4xl font-bold text-center text-blue-700 mb-10"
-      >
-        IIC Members
-      </motion.h1>
+      {/* Top Banner with Member Login */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-2xl border border-blue-100 shadow-sm">
+        <div>
+          <h1 className="text-3xl font-extrabold text-blue-800">IIC Faculty Members</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Access your personalized faculty dashboard to manage your MIC, IIC, Celebration, and Self-Driven events.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {memberUser ? (
+            <div className="flex items-center gap-3">
+              <Link
+                to="/member-dashboard"
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow transition text-sm flex items-center gap-2"
+              >
+                <span>👤</span> Dashboard ({memberUser.facultyName || memberUser.name})
+              </Link>
+              <button
+                onClick={logoutMember}
+                className="px-3 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 font-semibold rounded-xl text-xs transition"
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsLoginModalOpen(true)}
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition flex items-center gap-2 text-sm"
+            >
+              <span>🔑</span> Member Login
+            </button>
+          )}
+        </div>
+      </div>
 
       <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
         {members.map((member, index) => (
@@ -90,7 +98,10 @@ function Members() {
             <p className="text-sm text-gray-500 mt-1">{member.role}</p>
           </motion.div>
         ))}
-      </div>
+      <MemberLoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+      />
     </div>
   );
 }

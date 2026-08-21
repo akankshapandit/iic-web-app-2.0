@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 function Navbar() {
-
   const [showIECellMenu, setShowIECellMenu] = useState(false);
+  const { memberUser, logoutMember } = useAuth();
   return (
     <nav className="w-full bg-white shadow-md sticky top-0 z-50">
       <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6 py-3 flex items-center justify-between min-w-0">
@@ -127,6 +128,14 @@ function Navbar() {
 
         {/* RIGHT SIDE BUTTONS */}
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+
+          {memberUser && (
+            <Link to="/member-dashboard">
+              <button className="bg-indigo-600 text-white px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm rounded-lg hover:bg-indigo-700 transition flex items-center gap-1 whitespace-nowrap font-bold">
+                👤 Member Dashboard
+              </button>
+            </Link>
+          )}
 
           {/* REPORT GENERATOR BUTTON */}
           <Link to="/generate-report">
