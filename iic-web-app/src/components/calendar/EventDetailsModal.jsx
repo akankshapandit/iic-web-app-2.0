@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-function EventDetailsModal({ event, onClose, onUpdate }) {
+function EventDetailsModal({ event, onClose, onUpdate, onDelete }) {
   const [facultyEmail, setFacultyEmail] = useState(event.facultyEmail || "");
   const [eventTime, setEventTime] = useState(event.time || "10:00 AM");
   const [customMessage, setCustomMessage] = useState(
@@ -195,6 +195,18 @@ function EventDetailsModal({ event, onClose, onUpdate }) {
             >
               {loading ? "Saving..." : "Save Settings"}
             </button>
+            {onDelete && (
+              <button 
+                onClick={() => {
+                  onClose();
+                  onDelete(event.id, event.title);
+                }}
+                disabled={loading}
+                className="w-full bg-red-50 border border-red-200 hover:bg-red-100 text-red-600 font-bold py-2 rounded-xl transition shadow-sm disabled:opacity-50 text-sm flex items-center justify-center gap-2"
+              >
+                <span>🗑️</span> Delete Event
+              </button>
+            )}
           </div>
 
           <div className="text-center mt-1">

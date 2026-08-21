@@ -11,11 +11,70 @@ const DEPARTMENT_PALETTE = [
   "#422006", "#1c1917",
 ];
 
+const CELEBRATION_COLOR = "#d946ef";
+
+const parseDDMMYYYYDate = (raw) => {
+  if (!raw) return null;
+  const str = String(raw).trim();
+  if (!str) return null;
+
+  // Explicit DD-MM-YYYY parsing (Day = parts[0], Month = parts[1], Year = parts[2])
+  const parts = str.split(/[-/.]/);
+  if (parts.length >= 3) {
+    const p1 = parseInt(parts[0], 10);
+    const p2 = parseInt(parts[1], 10);
+    const p3 = parseInt(parts[2], 10);
+
+    // If p3 is 4-digit year e.g. "15-10-2025" -> Day=p1, Month=p2, Year=p3
+    if (!isNaN(p1) && !isNaN(p2) && !isNaN(p3) && p3 > 1000) {
+      return new Date(Date.UTC(p3, p2 - 1, p1));
+    }
+
+    // If p1 is 4-digit year e.g. "2025-10-15" -> Year=p1, Month=p2, Day=p3
+    if (!isNaN(p1) && !isNaN(p2) && !isNaN(p3) && p1 > 1000) {
+      return new Date(Date.UTC(p1, p2 - 1, p3));
+    }
+  }
+
+  const d = new Date(str);
+  return !isNaN(d.getTime()) ? d : null;
+};
+
 function CalendarView() {
   const [events, setEvents] = useState([]);
-  const [currentDate, setCurrentDate] = useState(new Date("2025-09-01"));
+  const [currentDate, setCurrentDate] = useState(new Date("2026-08-01"));
   const [loading, setLoading] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
+
+  const handleDeleteEvent = async (eventId, eventTitle) => {
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete this event?\n\n"${eventTitle || "Event"}"`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      setLoading(true);
+      const res = await fetch(`http://localhost:3000/api/events/${eventId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setEvents((prev) => prev.filter((e) => e.id !== eventId));
+        if (selectedEvent && selectedEvent.id === eventId) {
+          setSelectedEvent(null);
+        }
+        alert("Event deleted successfully.");
+      } else {
+        const errorRes = await res.json().catch(() => ({}));
+        alert(`Failed to delete event: ${errorRes.message || "Unknown error"}`);
+      }
+    } catch (err) {
+      console.error("deleteEvent Error:", err);
+      alert("Error deleting event. Please check backend server connection.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchEvents = async () => {
     try {
@@ -43,23 +102,32 @@ function CalendarView() {
         departmentColors[dept] = DEPARTMENT_PALETTE[i % DEPARTMENT_PALETTE.length];
       });
 
-      const formattedEvents = data.map((r) => ({
-        id: r._id,
-        title: r.title,
-        start: new Date(r.date),
-        extendedProps: {
-          faculty: r.facultyName,
-          facultyEmail: r.facultyEmail,
-          department: r.department,
-          status: r.status,
-          venue: r.venue,
-          autoReminder: r.autoReminder,
-          reminderSent: r.reminderSent
-        },
-        backgroundColor: departmentColors[r.department || "N/A"],
-        borderColor: departmentColors[r.department || "N/A"],
-        textColor: "#ffffff",
-      }));
+      const formattedEvents = data.map((r) => {
+        const isCelebration = r.isCelebration || r.category === "Celebration Event";
+        const eventColor = isCelebration ? CELEBRATION_COLOR : departmentColors[r.department || "N/A"];
+
+        return {
+          id: r._id,
+          rawDate: r.date,
+          title: r.title,
+          start: new Date(r.date),
+          extendedProps: {
+            faculty: r.facultyName,
+            facultyEmail: r.facultyEmail,
+            department: r.department,
+            status: r.status,
+            venue: r.venue,
+            category: r.category,
+            level: r.level || "",
+            isCelebration: isCelebration,
+            autoReminder: r.autoReminder,
+            reminderSent: r.reminderSent
+          },
+          backgroundColor: eventColor,
+          borderColor: eventColor,
+          textColor: "#ffffff",
+        };
+      });
 
       setEvents(formattedEvents);
     } catch (error) {
@@ -132,6 +200,95 @@ function CalendarView() {
         }
       },
     });
+    e.target.value = "";
+  };
+
+  const handleCelebrationFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const parsedRows = results.data
+          .map((row) => {
+            const normalizedRow = {};
+            Object.keys(row).forEach((key) => {
+              normalizedRow[key.trim().toLowerCase()] = row[key];
+            });
+
+            const rawDate =
+              normalizedRow["date"] ||
+              normalizedRow["event date"] ||
+              normalizedRow["event_date"] ||
+              normalizedRow["activity date"] ||
+              normalizedRow["start date"] ||
+              normalizedRow["date (yyyy-mm-dd)"] ||
+              normalizedRow["date(yyyy-mm-dd)"];
+
+            const title =
+              normalizedRow["activity title"] ||
+              normalizedRow["activity_title"] ||
+              normalizedRow["title"] ||
+              normalizedRow["activity"] ||
+              normalizedRow["event title"] ||
+              normalizedRow["event_title"] ||
+              normalizedRow["event"] ||
+              normalizedRow["name"] ||
+              normalizedRow["celebration"];
+
+            if (!rawDate || !title) return null;
+
+            const parsedDate = parseDDMMYYYYDate(rawDate);
+            if (!parsedDate || isNaN(parsedDate.getTime())) return null;
+
+            return {
+              title: String(title).trim(),
+              date: parsedDate.toISOString(),
+              status: (normalizedRow["status"] || normalizedRow["state"] || "Active").trim(),
+              level: (normalizedRow["level"] || normalizedRow["tier"] || "").trim(),
+            };
+          })
+          .filter(Boolean);
+
+        if (parsedRows.length === 0) {
+          alert("No valid celebration events found in CSV. Please check date and title column formats.");
+          return;
+        }
+
+        try {
+          setLoading(true);
+          const res = await fetch("http://localhost:3000/api/events/celebration-bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(parsedRows)
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            let msg = `${data.imported || 0} Celebration Events imported successfully.`;
+            if (data.skipped > 0) {
+              msg += ` (${data.skipped} duplicates skipped)`;
+            }
+            if (data.invalidCount > 0) {
+              msg += ` (${data.invalidCount} invalid rows skipped)`;
+            }
+            alert(msg);
+            fetchEvents();
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            alert(`Failed to upload celebration events: ${errData.message || "Unknown error"}`);
+          }
+        } catch (error) {
+          console.error(error);
+          alert("Error uploading celebration events");
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+    e.target.value = "";
   };
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -190,6 +347,31 @@ function CalendarView() {
     }
   };
 
+  const currentViewMonth = currentDate.getMonth();
+  const currentViewYear = currentDate.getFullYear();
+
+  // Helper to extract year and 0-indexed month safely without timezone offset shift
+  const getEventMonthAndYear = (rawDate, startDate) => {
+    if (typeof rawDate === "string") {
+      const dateOnly = rawDate.split("T")[0];
+      const parts = dateOnly.split("-");
+      if (parts.length >= 2) {
+        return {
+          year: parseInt(parts[0], 10),
+          month: parseInt(parts[1], 10) - 1,
+        };
+      }
+    }
+    const d = startDate ? new Date(startDate) : new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  };
+
+  // Filter events so ONLY events belonging to the currently displayed month & year are rendered
+  const visibleEvents = events.filter((event) => {
+    const { month, year } = getEventMonthAndYear(event.rawDate, event.start);
+    return month === currentViewMonth && year === currentViewYear;
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-purple-100 p-6 space-y-6">
 
@@ -216,6 +398,17 @@ function CalendarView() {
               type="file"
               accept=".csv"
               onChange={handleFileUpload}
+              className="hidden"
+              disabled={loading}
+            />
+          </label>
+
+          <label className="px-4 py-2.5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white font-bold rounded-xl shadow transition cursor-pointer text-sm flex items-center gap-2">
+            <span>🎉</span> Upload Celebration CSV
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCelebrationFileUpload}
               className="hidden"
               disabled={loading}
             />
@@ -398,30 +591,28 @@ function CalendarView() {
       {/* 🎯 Month + Year Controls */}
       <div className="flex gap-4 justify-end">
         <select
-          className="px-4 py-2 rounded-xl bg-white/80 backdrop-blur border shadow hover:shadow-md outline-none"
+          className="px-4 py-2 rounded-xl bg-white/80 backdrop-blur border shadow hover:shadow-md outline-none font-semibold text-gray-700"
           value={currentDate.getMonth()}
           onChange={(e) => {
-            const newDate = new Date(currentDate);
-            newDate.setMonth(parseInt(e.target.value));
+            const newDate = new Date(currentDate.getFullYear(), parseInt(e.target.value), 1);
             setCurrentDate(newDate);
           }}
         >
           {Array.from({ length: 12 }).map((_, i) => (
             <option key={i} value={i}>
-              {new Date(0, i).toLocaleString("default", { month: "long" })}
+              {new Date(2026, i, 1).toLocaleString("default", { month: "long" })}
             </option>
           ))}
         </select>
         <select
-          className="px-4 py-2 rounded-xl bg-white/80 backdrop-blur border shadow hover:shadow-md outline-none"
+          className="px-4 py-2 rounded-xl bg-white/80 backdrop-blur border shadow hover:shadow-md outline-none font-semibold text-gray-700"
           value={currentDate.getFullYear()}
           onChange={(e) => {
-            const newDate = new Date(currentDate);
-            newDate.setFullYear(parseInt(e.target.value));
+            const newDate = new Date(parseInt(e.target.value), currentDate.getMonth(), 1);
             setCurrentDate(newDate);
           }}
         >
-          {[2025, 2026, 2027].map((year) => (
+          {[2024, 2025, 2026, 2027, 2028].map((year) => (
             <option key={year} value={year}>
               {year}
             </option>
@@ -432,11 +623,20 @@ function CalendarView() {
       {/* 📅 Calendar */}
       <div className="bg-white/80 backdrop-blur-xl p-6 rounded-2xl shadow-2xl border border-white/30 relative">
         <FullCalendar
-          key={currentDate.toISOString()}
+          key={`${currentViewYear}-${currentViewMonth}`}
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
           initialDate={currentDate}
-          events={events}
+          datesSet={(dateInfo) => {
+            const viewStart = dateInfo.view.currentStart;
+            if (
+              viewStart.getMonth() !== currentDate.getMonth() ||
+              viewStart.getFullYear() !== currentDate.getFullYear()
+            ) {
+              setCurrentDate(new Date(viewStart.getFullYear(), viewStart.getMonth(), 1));
+            }
+          }}
+          events={visibleEvents}
           height="auto"
           eventDidMount={(info) => {
             const bg = info.event.backgroundColor || "#0f172a";
@@ -452,7 +652,45 @@ function CalendarView() {
           }}
           eventContent={(eventInfo) => {
             const bg = eventInfo.backgroundColor || eventInfo.event.backgroundColor || "#0f172a";
-            const { autoReminder, reminderSent } = eventInfo.event.extendedProps;
+            const { autoReminder, reminderSent, isCelebration, status, level } = eventInfo.event.extendedProps;
+            const isCelebrationType = isCelebration || eventInfo.event.extendedProps.category === "Celebration Event";
+
+            if (isCelebrationType) {
+              const statusText = status || "Active";
+              const levelText = level || "";
+              return (
+                <div
+                  className="w-full min-h-full px-2 py-2 rounded-md text-white cursor-pointer hover:opacity-90 transition relative group shadow-sm"
+                  style={{ backgroundColor: bg, color: "#ffffff" }}
+                >
+                  <div className="text-[12px] font-extrabold flex justify-between items-start gap-1 pr-6 leading-snug">
+                    <span className="line-clamp-2">🎉 {eventInfo.event.title}</span>
+                  </div>
+                  <div className="text-[10px] opacity-95 mt-1 font-medium leading-tight">
+                    Status: {statusText}
+                  </div>
+                  {levelText && (
+                    <div className="text-[10px] opacity-95 font-medium leading-tight mt-0.5">
+                      Level: {levelText}
+                    </div>
+                  )}
+
+                  {/* 🗑️ Delete Button */}
+                  <button
+                    type="button"
+                    title="Delete Event"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteEvent(eventInfo.event.id, eventInfo.event.title);
+                    }}
+                    className="absolute top-1 right-1 p-1 bg-red-600/80 hover:bg-red-700 text-white rounded text-[11px] opacity-80 group-hover:opacity-100 transition shadow-sm"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              );
+            }
+
             const eventMonth = new Date(eventInfo.event.start).getMonth();
             const isJuneOrJuly = eventMonth === 5 || eventMonth === 6;
 
@@ -462,16 +700,15 @@ function CalendarView() {
               else if (autoReminder) indicator = "🟢";
               else indicator = "🔴";
             } else if (reminderSent || autoReminder) {
-              // Still show green/check if they manually enabled it outside of June/July just in case
               indicator = reminderSent ? "✅" : "🟢";
             }
 
             return (
               <div
-                className="w-full min-h-full px-2 py-2 rounded-md text-white cursor-pointer hover:opacity-90 transition"
+                className="w-full min-h-full px-2 py-2 rounded-md text-white cursor-pointer hover:opacity-90 transition relative group"
                 style={{ backgroundColor: bg, color: "#ffffff" }}
               >
-                <div className="text-[12px] font-bold flex justify-between items-start gap-1">
+                <div className="text-[12px] font-bold flex justify-between items-start gap-1 pr-6">
                   <span className="line-clamp-2 leading-tight">{eventInfo.event.title}</span>
                   {indicator && (
                     <span className="text-xs shrink-0" title={reminderSent ? "Sent" : autoReminder ? "Enabled" : "Disabled"}>{indicator}</span>
@@ -480,10 +717,25 @@ function CalendarView() {
                 <div className="text-[10px] truncate opacity-95 mt-1">
                   {eventInfo.event.extendedProps.department}
                 </div>
-                <div className="flex items-center gap-1 mt-1 text-[11px] truncate opacity-95">
-                  <span className="text-lg shrink-0">👨‍🏫</span>
-                  <span className="truncate">{eventInfo.event.extendedProps.faculty}</span>
+                <div className="flex items-center justify-between gap-1 mt-1 text-[11px] truncate opacity-95">
+                  <div className="flex items-center gap-1 truncate">
+                    <span className="text-lg shrink-0">👨‍🏫</span>
+                    <span className="truncate">{eventInfo.event.extendedProps.faculty}</span>
+                  </div>
                 </div>
+
+                {/* 🗑️ Delete Button */}
+                <button
+                  type="button"
+                  title="Delete Event"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteEvent(eventInfo.event.id, eventInfo.event.title);
+                  }}
+                  className="absolute top-1 right-1 p-1 bg-red-600/80 hover:bg-red-700 text-white rounded text-[11px] opacity-80 group-hover:opacity-100 transition shadow-sm"
+                >
+                  🗑️
+                </button>
               </div>
             );
           }}
@@ -504,6 +756,7 @@ function CalendarView() {
           event={selectedEvent} 
           onClose={() => setSelectedEvent(null)}
           onUpdate={fetchEvents}
+          onDelete={handleDeleteEvent}
         />
       )}
     </div>
