@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
 function MemberLoginModal({ isOpen, onClose }) {
-  const [facultyList, setFacultyList] = useState([]);
-  const [selectedFaculty, setSelectedFaculty] = useState("");
   const [password, setPassword] = useState("CMRIT@2026");
   const [isSetupMode, setIsSetupMode] = useState(false);
   const [newPassword, setNewPassword] = useState("");
