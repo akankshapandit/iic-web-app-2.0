@@ -15,9 +15,9 @@ function Navbar() {
         </div>
 
         {/* CENTER NAV LINKS */}
-        <div className="flex items-center gap-2 lg:gap-3 xl:gap-4 2xl:gap-6 text-gray-700 font-medium text-xs lg:text-sm 2xl:text-base flex-shrink min-w-0">
+        <div className="hidden lg:flex items-center gap-2 xl:gap-4 text-gray-700 font-medium text-xs xl:text-sm whitespace-nowrap">
 
-          <Link to="/" className="hover:text-blue-600 transition whitespace-nowrap">Home</Link>
+          <Link to="/" className="hover:text-blue-600 transition">Home</Link>
           {/* I&E CELL DROPDOWN */}
 
           <div
@@ -100,14 +100,14 @@ function Navbar() {
           </div>
           
           {/* Report Auditor Link */}
-          <Link to="/final-audit" className="text-blue-600 font-bold hover:text-blue-800 transition whitespace-nowrap flex items-center gap-1">
+          <Link to="/final-audit" className="text-blue-600 font-bold hover:text-blue-800 transition flex items-center gap-1">
             🔍 Report Auditor
           </Link>
 
-          <Link to="/patents" className="hover:text-blue-600 transition whitespace-nowrap">Patents</Link>
+          <Link to="/patents" className="hover:text-blue-600 transition">Patents</Link>
           {/* STARTUPS DROPDOWN */}
           <div className="relative group py-1">
-            <button className="hover:text-blue-600 transition whitespace-nowrap flex items-center gap-1">
+            <button className="hover:text-blue-600 transition flex items-center gap-1">
               Startups
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
             </button>
@@ -117,17 +117,17 @@ function Navbar() {
             </div>
           </div>
 
-          <Link to="/achievements" className="hover:text-blue-600 transition whitespace-nowrap">Achievements</Link>
-          <Link to="/events/calendar" className="hover:text-blue-600 transition whitespace-nowrap">Events</Link>
-          <Link to="/incubation" className="hover:text-blue-600 transition whitespace-nowrap">Incubation</Link>
-          <Link to="/events/archive" className="hover:text-blue-600 transition whitespace-nowrap">Archive</Link>
-          <Link to="/members" className="hover:text-blue-600 transition whitespace-nowrap">Members</Link>
+          <Link to="/achievements" className="hover:text-blue-600 transition">Achievements</Link>
+          <Link to="/events/calendar" className="hover:text-blue-600 transition">Events</Link>
+          <Link to="/incubation" className="hover:text-blue-600 transition">Incubation</Link>
+          <Link to="/events/archive" className="hover:text-blue-600 transition">Archive</Link>
+          <Link to="/members" className="hover:text-blue-600 transition font-bold text-blue-700">Members</Link>
 
 
         </div>
 
         {/* RIGHT SIDE BUTTONS */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0">
 
           {memberUser && (
             <Link to="/member-dashboard">
