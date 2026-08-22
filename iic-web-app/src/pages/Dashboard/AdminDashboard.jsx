@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import DashboardStats from "../../components/dashboard/DashboardStats";
+import { API_BASE_URL } from "../../config";
 
 function AdminDashboard() {
   const [notifications, setNotifications] = useState({
@@ -12,7 +13,7 @@ function AdminDashboard() {
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const res = await fetch("http://localhost:3000/api/events/dashboard-stats");
+        const res = await fetch(`${API_BASE_URL}/api/events/dashboard-stats`);
         if (res.ok) {
           const data = await res.json();
           setNotifications(data);

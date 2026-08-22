@@ -1,5 +1,6 @@
 import React, { useState, useRef } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../../config";
 import { jsPDF } from "jspdf";
 import { 
   Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, BorderStyle, WidthType, ImageRun, Header, TableLayoutType, VerticalAlign 
@@ -87,7 +88,7 @@ function GenerateReport() {
       formData.append("poster", file);
 
       const response = await axios.post(
-        "http://localhost:3000/api/report/extract-poster",
+        `${API_BASE_URL}/api/report/extract-poster`,
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
@@ -320,7 +321,7 @@ function GenerateReport() {
       if (feedbackScreenshotFile) formData.append("feedbackScreenshot", feedbackScreenshotFile);
 
       const response = await axios.post(
-        "http://localhost:3000/api/report/generate",
+        `${API_BASE_URL}/api/report/generate`,
         formData,
         { headers: { Authorization: `Bearer ${token.trim()}`, "Content-Type": "multipart/form-data" } }
       );

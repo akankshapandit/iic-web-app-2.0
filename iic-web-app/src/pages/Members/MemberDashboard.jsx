@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { API_BASE_URL } from "../../config";
 import EventDetailModal from "./EventDetailModal";
 import CreateSelfDrivenModal from "./CreateSelfDrivenModal";
 
@@ -31,7 +32,7 @@ function MemberDashboard() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:3000/api/members/events", {
+      const res = await fetch(`${API_BASE_URL}/api/members/events`, {
         headers: {
           Authorization: `Bearer ${memberToken}`
         }

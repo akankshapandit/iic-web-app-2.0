@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { API_BASE_URL } from "../../config";
 
 function MemberLoginModal({ isOpen, onClose }) {
   const [password, setPassword] = useState("CMRIT@2026");
@@ -46,7 +47,7 @@ function MemberLoginModal({ isOpen, onClose }) {
 
   const fetchFacultyList = async () => {
     try {
-      const res = await fetch("http://localhost:3000/api/members/list");
+      const res = await fetch(`${API_BASE_URL}/api/members/list`);
       if (res.ok) {
         const data = await res.json();
         if (data && data.length > 0) {
@@ -79,7 +80,7 @@ function MemberLoginModal({ isOpen, onClose }) {
           return;
         }
 
-        const res = await fetch("http://localhost:3000/api/members/setup-password", {
+        const res = await fetch(`${API_BASE_URL}/api/members/setup-password`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -97,7 +98,7 @@ function MemberLoginModal({ isOpen, onClose }) {
           setErrorMsg(data.message || "Password setup failed.");
         }
       } else {
-        const res = await fetch("http://localhost:3000/api/members/login", {
+        const res = await fetch(`${API_BASE_URL}/api/members/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

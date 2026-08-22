@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { API_BASE_URL } from "../../config";
 
 function EventDetailModal({ event, isOpen, onClose, onUpdate }) {
   const { memberToken } = useAuth();
@@ -29,7 +30,7 @@ function EventDetailModal({ event, isOpen, onClose, onUpdate }) {
     setMsg({ type: "", text: "" });
 
     try {
-      const res = await fetch(`http://localhost:3000/api/members/events/${event._id}/report-link`, {
+      const res = await fetch(`${API_BASE_URL}/api/members/events/${event._id}/report-link`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -66,7 +67,7 @@ function EventDetailModal({ event, isOpen, onClose, onUpdate }) {
     formData.append("photoType", photoType);
 
     try {
-      const res = await fetch(`http://localhost:3000/api/members/events/${event._id}/upload-photo`, {
+      const res = await fetch(`${API_BASE_URL}/api/members/events/${event._id}/upload-photo`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${memberToken}`

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { API_BASE_URL } from "../../config";
 
 function EventDetailsModal({ event, onClose, onUpdate, onDelete }) {
   const [facultyEmail, setFacultyEmail] = useState(event.facultyEmail || "");
@@ -12,7 +13,7 @@ function EventDetailsModal({ event, onClose, onUpdate, onDelete }) {
   const handleSaveSettings = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`http://localhost:3000/api/events/${event.id}/settings`, {
+      const res = await fetch(`${API_BASE_URL}/api/events/${event.id}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -44,7 +45,7 @@ function EventDetailsModal({ event, onClose, onUpdate, onDelete }) {
     }
     try {
       setLoading(true);
-      const res = await fetch(`http://localhost:3000/api/events/${event.id}/manual-reminder`, {
+      const res = await fetch(`${API_BASE_URL}/api/events/${event.id}/manual-reminder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

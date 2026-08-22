@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { API_BASE_URL } from "../../config";
 
 function ForgotPassword() {
   const [email, setEmail] = useState("");
 
   const handleSubmit = async () => {
-    const res = await fetch("http://localhost:3000/api/auth/forgot-password", {
+    const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),

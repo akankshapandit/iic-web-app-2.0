@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { API_BASE_URL } from "../../config";
 
 function CreateSelfDrivenModal({ isOpen, onClose, onCreated }) {
   const { memberUser, memberToken } = useAuth();
@@ -36,7 +37,7 @@ function CreateSelfDrivenModal({ isOpen, onClose, onCreated }) {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:3000/api/members/events/self-driven", {
+      const res = await fetch(`${API_BASE_URL}/api/members/events/self-driven`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

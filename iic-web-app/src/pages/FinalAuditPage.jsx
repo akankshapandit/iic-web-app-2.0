@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config";
 
 /** Green if score is 7+ on a N/10 scale, or Pass; red only if parsed score is below 7 */
 function isBreakdownScoreOk(val) {
@@ -25,7 +26,7 @@ const FinalAuditPage = () => {
 
     setLoading(true);
     try {
-      const { data } = await axios.post("http://localhost:3000/api/report/audit-pdf", formData, {
+      const { data } = await axios.post(`${API_BASE_URL}/api/report/audit-pdf`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setResult(data);

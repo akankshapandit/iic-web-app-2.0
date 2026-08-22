@@ -42,9 +42,10 @@ const parseDDMMYYYYDate = (raw) => {
 
 function CalendarView() {
   const [events, setEvents] = useState([]);
-  const [currentDate, setCurrentDate] = useState(new Date("2026-08-01"));
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 1, 1));
   const [loading, setLoading] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [filterMode, setFilterMode] = useState("ALL"); // ALL, IIC, CELEBRATION
 
   const handleDeleteEvent = async (eventId, eventTitle) => {
     const confirmDelete = window.confirm(
@@ -54,7 +55,7 @@ function CalendarView() {
 
     try {
       setLoading(true);
-      const res = await fetch(`http://localhost:3000/api/events/${eventId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/events/${eventId}`, {
         method: "DELETE",
       });
 
@@ -79,7 +80,7 @@ function CalendarView() {
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:3000/api/events");
+      const res = await fetch(`${API_BASE_URL}/api/events`);
       if (!res.ok) throw new Error("Failed to fetch events");
       
       const rawData = await res.json();
@@ -180,7 +181,7 @@ function CalendarView() {
 
         try {
           setLoading(true);
-          const res = await fetch("http://localhost:3000/api/events/bulk", {
+          const res = await fetch(`${API_BASE_URL}/api/events/bulk`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(parsedRows)
@@ -259,7 +260,7 @@ function CalendarView() {
 
         try {
           setLoading(true);
-          const res = await fetch("http://localhost:3000/api/events/celebration-bulk", {
+          const res = await fetch(`${API_BASE_URL}/api/events/celebration-bulk`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(parsedRows)
@@ -313,7 +314,7 @@ function CalendarView() {
     }
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:3000/api/events", {
+      const res = await fetch(`${API_BASE_URL}/api/events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newEventData),
