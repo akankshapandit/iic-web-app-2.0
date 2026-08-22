@@ -1,9 +1,9 @@
 import fs from "fs";
 import path from "path";
-import fileDir from "url";
-import bcrypt from "bcryptjs";
-import Event from "../models/Event.js";
-import User from "../models/User.js";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Helper function to normalize faculty names
 export const normalizeFacultyName = (rawName) => {
@@ -28,7 +28,7 @@ const parseCSVDate = (dateStr) => {
 };
 
 // Simple CSV parser supporting quotes
-const parseCSVContent = (content) => {
+export const parseCSVContent = (content) => {
   const lines = content.split(/\r?\n/).filter(line => line.trim().length > 0);
   if (lines.length === 0) return [];
   
@@ -67,10 +67,19 @@ const parseCSVContent = (content) => {
   return rows;
 };
 
+export const getCSVFilePath = () => {
+  const candidatePaths = [
+    path.join(__dirname, "..", "members-iic.csv"),
+    path.join(process.cwd(), "backend", "members-iic.csv"),
+    path.join(process.cwd(), "members-iic.csv")
+  ];
+  return candidatePaths.find(p => fs.existsSync(p));
+};
+
 export const seedCSVData = async () => {
   try {
-    const csvPath = path.join(process.cwd(), "members-iic.csv");
-    if (!fs.existsSync(csvPath)) {
+    const csvPath = getCSVFilePath();
+    if (!csvPath) {
       console.log("[CSV Seeder] members-iic.csv not found, skipping seed.");
       return;
     }

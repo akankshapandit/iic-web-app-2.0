@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import path from "path";
 import fs from "fs";
-import { normalizeFacultyName } from "../utils/csvSeeder.js";
+import { normalizeFacultyName, getCSVFilePath, parseCSVContent } from "../utils/csvSeeder.js";
 
 // Helper to generate JWT Token
 const generateToken = (user) => {
@@ -24,20 +24,49 @@ const generateToken = (user) => {
 // 1. Get Public List of Faculty Members for Selection/Login
 export const getFacultyMembers = async (req, res) => {
   try {
-    const users = await User.find({ role: "faculty" })
+    let users = await User.find({
+      $or: [{ role: "faculty" }, { facultyName: { $exists: true, $ne: "" } }]
+    })
       .select("-password")
       .sort({ facultyName: 1, name: 1 });
     
-    // Fallback if users empty, extract unique faculty from Events
+    // Fallback 1: Extract unique faculty from Events collection
     if (users.length === 0) {
       const distinctFaculty = await Event.distinct("facultyName");
-      const list = distinctFaculty.filter(Boolean).map(name => ({
-        _id: name,
-        name,
-        facultyName: name,
-        department: "N/A"
-      }));
-      return res.status(200).json(list);
+      if (distinctFaculty && distinctFaculty.length > 0) {
+        users = distinctFaculty.filter(Boolean).map(name => ({
+          _id: name,
+          name,
+          facultyName: name,
+          department: "N/A"
+        }));
+        return res.status(200).json(users);
+      }
+    }
+
+    // Fallback 2: Direct CSV parse fallback if database not seeded yet
+    if (users.length === 0) {
+      const csvPath = getCSVFilePath();
+      if (csvPath && fs.existsSync(csvPath)) {
+        const fileContent = fs.readFileSync(csvPath, "utf-8");
+        const records = parseCSVContent(fileContent);
+        const map = new Map();
+        records.forEach(r => {
+          const raw = r["Name of the faculty"] || r["faculty"] || "";
+          const fName = normalizeFacultyName(raw);
+          const dept = (r["department"] || "N/A").trim();
+          if (fName && fName !== "Unknown" && !map.has(fName)) {
+            map.set(fName, dept);
+          }
+        });
+        const csvList = Array.from(map.entries()).map(([fName, dept]) => ({
+          _id: fName,
+          name: fName,
+          facultyName: fName,
+          department: dept
+        }));
+        return res.status(200).json(csvList);
+      }
     }
 
     res.status(200).json(users);

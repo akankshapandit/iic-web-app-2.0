@@ -15,6 +15,31 @@ function MemberLoginModal({ isOpen, onClose }) {
   const { loginMember } = useAuth();
   const navigate = useNavigate();
 
+  const DEFAULT_FACULTY_LIST = [
+    { facultyName: "Dr. Seetha", department: "ISE" },
+    { facultyName: "Dr. Jayanthi", department: "CSE" },
+    { facultyName: "Dr. Sam Gilvine", department: "AIDS" },
+    { facultyName: "Dr.Sridevi S", department: "ECE" },
+    { facultyName: "Ms. Keka", department: "ECE" },
+    { facultyName: "Ms. Lynsha", department: "CSE" },
+    { facultyName: "Dr. Naveen Kumar", department: "ECE" },
+    { facultyName: "Dr. Rajesh Gopal", department: "BS Phy" },
+    { facultyName: "Ms. Moumita Roy", department: "MCA" },
+    { facultyName: "Dr. Vakula Rani", department: "MCA" },
+    { facultyName: "Prof.Komala Devi", department: "ISE" },
+    { facultyName: "Mr. Praveen D Jadhav", department: "BS / Startup & Incubation" },
+    { facultyName: "Dr. Meenakshi K", department: "BS MATH" },
+    { facultyName: "Dr. Chandrika", department: "MCA" },
+    { facultyName: "Dr. Mohan Kumar", department: "MBA" },
+    { facultyName: "Prof. Novy Jacob", department: "AIML" },
+    { facultyName: "Dr. Satyabrata Das", department: "BS CHEM" },
+    { facultyName: "Dr.Meenakshi R Patil", department: "ECE" },
+    { facultyName: "Prof. Manjunatha Babu", department: "AIDS" }
+  ];
+
+  const [facultyList, setFacultyList] = useState(DEFAULT_FACULTY_LIST);
+  const [selectedFaculty, setSelectedFaculty] = useState(DEFAULT_FACULTY_LIST[0].facultyName);
+
   useEffect(() => {
     if (isOpen) {
       fetchFacultyList();
@@ -26,13 +51,13 @@ function MemberLoginModal({ isOpen, onClose }) {
       const res = await fetch("http://localhost:3000/api/members/list");
       if (res.ok) {
         const data = await res.json();
-        setFacultyList(data);
-        if (data.length > 0) {
+        if (data && data.length > 0) {
+          setFacultyList(data);
           setSelectedFaculty(data[0].facultyName || data[0].name);
         }
       }
     } catch (err) {
-      console.error("Failed to fetch faculty list:", err);
+      console.error("Failed to fetch faculty list from server, using default list:", err);
     }
   };
 
