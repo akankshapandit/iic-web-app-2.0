@@ -2,103 +2,117 @@ import express from "express";
 
 import {
   getEvents,
-  getIICDashboardEvents,
+  getEventById,
   createEvent,
-  bulkUpload,
   updateEvent,
+  updateEventMedia,
   deleteEvent,
-  getDashboardStats,
-  celebrationBulkUpload,
-  sendManualReminder,
 } from "../controllers/eventController.js";
 
 const router =
   express.Router();
 
-// ============================================================
-// GET ALL EVENTS
-// GET /api/events
-// ============================================================
+/*
+============================================================
+GET ALL EVENTS
+============================================================
+
+Used by:
+
+- Department Calendar
+- President Dashboard
+- Vice President Dashboard
+- Member Dashboard admin view
+
+Returns complete Event documents including:
+
+reportLink
+posterLink
+videoLink
+photos
+collegePhoto
+eventPhoto
+*/
 
 router.get(
   "/",
   getEvents
 );
 
-// ============================================================
-// IIC DASHBOARD
-// GET /api/events/iic-dashboard
-// ============================================================
+/*
+============================================================
+GET ONE EVENT
+============================================================
+*/
 
 router.get(
-  "/iic-dashboard",
-  getIICDashboardEvents
+  "/:id",
+  getEventById
 );
 
-// ============================================================
-// DASHBOARD STATS
-// GET /api/events/stats
-// ============================================================
-
-router.get(
-  "/stats",
-  getDashboardStats
-);
-
-// ============================================================
-// CREATE EVENT
-// POST /api/events
-// ============================================================
+/*
+============================================================
+CREATE EVENT
+============================================================
+*/
 
 router.post(
   "/",
   createEvent
 );
 
-// ============================================================
-// BULK UPLOAD
-// POST /api/events/bulk-upload
-// ============================================================
+/*
+============================================================
+UPDATE EVENT
+============================================================
 
-router.post(
-  "/bulk-upload",
-  bulkUpload
-);
+Example:
 
-// ============================================================
-// CELEBRATION BULK UPLOAD
-// POST /api/events/celebration-bulk-upload
-// ============================================================
+PUT /api/events/:id
 
-router.post(
-  "/celebration-bulk-upload",
-  celebrationBulkUpload
-);
+Body:
 
-// ============================================================
-// UPDATE EVENT
-// PUT /api/events/:id
-// ============================================================
+{
+  "status": "COMPLETED"
+}
+*/
 
 router.put(
   "/:id",
   updateEvent
 );
 
-// ============================================================
-// MANUAL REMINDER
-// POST /api/events/:id/reminder
-// ============================================================
+/*
+============================================================
+UPDATE EVENT MEDIA
+============================================================
 
-router.post(
-  "/:id/reminder",
-  sendManualReminder
+This MUST come before any generic route
+that could potentially consume /:id.
+
+Endpoint:
+
+PUT /api/events/:id/media
+
+FormData:
+
+report
+poster
+photos
+posterLink
+videoLink
+*/
+
+router.put(
+  "/:id/media",
+  updateEventMedia
 );
 
-// ============================================================
-// DELETE EVENT
-// DELETE /api/events/:id
-// ============================================================
+/*
+============================================================
+DELETE EVENT
+============================================================
+*/
 
 router.delete(
   "/:id",

@@ -10,6 +10,7 @@ import memberRoutes from "./routes/memberRoutes.js";
 import fileUpload from 'express-fileupload';
 import startScheduler from "./utils/scheduler.js";
 import { seedCSVData } from "./utils/csvSeeder.js";
+import path from "path";
 
 connectDB().then(() => {
   seedCSVData();
@@ -19,7 +20,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(fileUpload());
-app.use('/uploads', express.static('uploads'));
+app.use(
+  "/uploads",
+  express.static(
+    path.join(process.cwd(), "uploads")
+  )
+);
 
 // Routes
 app.use("/api/auth", authRoutes);
