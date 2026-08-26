@@ -1,24 +1,108 @@
 import express from "express";
+
 import {
   getEvents,
+  getIICDashboardEvents,
   createEvent,
   bulkUpload,
-  updateReminderSettings,
-  sendManualReminder,
-  getDashboardStats,
+  updateEvent,
   deleteEvent,
-  celebrationBulkUpload
+  getDashboardStats,
+  celebrationBulkUpload,
+  sendManualReminder,
 } from "../controllers/eventController.js";
 
-const router = express.Router();
+const router =
+  express.Router();
 
-router.get("/", getEvents);
-router.post("/", createEvent);
-router.post("/bulk", bulkUpload);
-router.post("/celebration-bulk", celebrationBulkUpload);
-router.put("/:id/settings", updateReminderSettings);
-router.post("/:id/manual-reminder", sendManualReminder);
-router.get("/dashboard-stats", getDashboardStats);
-router.delete("/:id", deleteEvent);
+// ============================================================
+// GET ALL EVENTS
+// GET /api/events
+// ============================================================
+
+router.get(
+  "/",
+  getEvents
+);
+
+// ============================================================
+// IIC DASHBOARD
+// GET /api/events/iic-dashboard
+// ============================================================
+
+router.get(
+  "/iic-dashboard",
+  getIICDashboardEvents
+);
+
+// ============================================================
+// DASHBOARD STATS
+// GET /api/events/stats
+// ============================================================
+
+router.get(
+  "/stats",
+  getDashboardStats
+);
+
+// ============================================================
+// CREATE EVENT
+// POST /api/events
+// ============================================================
+
+router.post(
+  "/",
+  createEvent
+);
+
+// ============================================================
+// BULK UPLOAD
+// POST /api/events/bulk-upload
+// ============================================================
+
+router.post(
+  "/bulk-upload",
+  bulkUpload
+);
+
+// ============================================================
+// CELEBRATION BULK UPLOAD
+// POST /api/events/celebration-bulk-upload
+// ============================================================
+
+router.post(
+  "/celebration-bulk-upload",
+  celebrationBulkUpload
+);
+
+// ============================================================
+// UPDATE EVENT
+// PUT /api/events/:id
+// ============================================================
+
+router.put(
+  "/:id",
+  updateEvent
+);
+
+// ============================================================
+// MANUAL REMINDER
+// POST /api/events/:id/reminder
+// ============================================================
+
+router.post(
+  "/:id/reminder",
+  sendManualReminder
+);
+
+// ============================================================
+// DELETE EVENT
+// DELETE /api/events/:id
+// ============================================================
+
+router.delete(
+  "/:id",
+  deleteEvent
+);
 
 export default router;

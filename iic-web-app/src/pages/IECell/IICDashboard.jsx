@@ -1,417 +1,94 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { departmentActivities } from "../../data/activities";
 
 function IICDashboard() {
   const navigate = useNavigate();
 
-  const role = localStorage.getItem("iicRole");
-  const username = localStorage.getItem("iicUsername");
+  const [events, setEvents] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [activeTab, setActiveTab] = useState("iic");
+  const [loading, setLoading] = useState(true);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const role = localStorage.getItem("iicRole") || "President";
 
   // =========================================================
-  // STATES
-  // =========================================================
-
-  const [activities, setActivities] = useState([]);
-
-  const [reportInputs, setReportInputs] = useState({});
-  const [videoInputs, setVideoInputs] = useState({});
-
-  const [editingReport, setEditingReport] = useState(null);
-  const [editingVideo, setEditingVideo] = useState(null);
-
-  const [showAddActivity, setShowAddActivity] = useState(false);
-
-  const [newActivity, setNewActivity] = useState({
-    title: "",
-    date: "",
-    coordinator: "",
-    department: "",
-    status: "Upcoming",
-  });
-
-  // =========================================================
-  // LOAD ACTIVITIES
+  // FETCH EVENTS
   // =========================================================
 
   useEffect(() => {
-    try {
-      const savedActivities = localStorage.getItem("iicActivities");
-
-      let saved = [];
-
-      if (savedActivities) {
-        try {
-          const parsed = JSON.parse(savedActivities);
-
-          if (Array.isArray(parsed)) {
-            saved = parsed;
-          }
-        } catch (error) {
-          console.error(
-            "Error reading saved activities:",
-            error
-          );
-        }
-      }
-
-      const allActivities = [];
-
-      Object.entries(departmentActivities || {}).forEach(
-        ([department, departmentEvents]) => {
-          if (!Array.isArray(departmentEvents)) return;
-
-          departmentEvents.forEach((activity) => {
-            const uniqueId = `${department}-${activity.id}`;
-
-            const savedActivity = saved.find(
-              (item) => item.uniqueId === uniqueId
-            );
-
-            allActivities.push({
-              ...activity,
-
-              uniqueId,
-
-              department,
-
-              reportLink:
-                savedActivity?.reportLink ||
-                activity.reportLink ||
-                "",
-
-              reportUploaded:
-                savedActivity?.reportUploaded ||
-                Boolean(
-                  savedActivity?.reportLink ||
-                  activity.reportLink
-                ),
-
-              videoLink:
-                savedActivity?.videoLink ||
-                activity.videoLink ||
-                "",
-
-              // PHOTO 1
-              photo1:
-                typeof savedActivity?.photo1 === "string"
-                  ? savedActivity.photo1
-                  : "",
-
-              // PHOTO 2
-              photo2:
-                typeof savedActivity?.photo2 === "string"
-                  ? savedActivity.photo2
-                  : "",
-            });
-          });
-        }
-      );
-
-      // =====================================================
-      // CUSTOM ACTIVITIES
-      // =====================================================
-
-      const customActivities = saved.filter(
-        (activity) =>
-          typeof activity.uniqueId === "string" &&
-          activity.uniqueId.startsWith("custom-")
-      );
-
-      const finalActivities = [
-        ...allActivities,
-        ...customActivities,
-      ];
-
-      setActivities(finalActivities);
-
-      try {
-        localStorage.setItem(
-          "iicActivities",
-          JSON.stringify(finalActivities)
-        );
-      } catch (error) {
-        console.error(
-          "Could not save activities:",
-          error
-        );
-      }
-    } catch (error) {
-      console.error(
-        "Error loading IIC activities:",
-        error
-      );
-    }
+    fetchEvents();
   }, []);
 
-  // =========================================================
-  // SAVE ACTIVITIES
-  // =========================================================
-
-  const saveActivities = (updatedActivities) => {
-    setActivities(updatedActivities);
-
+  const fetchEvents = async () => {
     try {
-      localStorage.setItem(
-        "iicActivities",
-        JSON.stringify(updatedActivities)
-      );
-    } catch (error) {
-      console.error(
-        "Could not save activities:",
-        error
+      setLoading(true);
+      setError("");
+
+      const response = await fetch(
+        "http://localhost:3000/api/events"
       );
 
-      if (error.name === "QuotaExceededError") {
-        alert(
-          "Browser storage is full. Please delete some old photos or use smaller photos."
-        );
+      if (!response.ok) {
+        throw new Error("Failed to fetch events");
       }
+
+      const data = await response.json();
+
+      setEvents(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("IIC Dashboard Error:", err);
+      setError("Unable to load events.");
+    } finally {
+      setLoading(false);
     }
   };
 
   // =========================================================
-  // SAVE / COMPRESS IMAGE
+  // FETCH MEMBERS
   // =========================================================
 
-  const processImage = (file) => {
-    return new Promise((resolve, reject) => {
-      if (!file) {
-        reject(new Error("No file selected."));
-        return;
-      }
-
-      if (!file.type.startsWith("image/")) {
-        reject(
-          new Error("Please select an image file.")
-        );
-        return;
-      }
-
-      const reader = new FileReader();
-
-      reader.onload = (event) => {
-        const image = new Image();
-
-        image.onload = () => {
-          const maxWidth = 1200;
-          const maxHeight = 1200;
-
-          let width = image.width;
-          let height = image.height;
-
-          // Resize large images
-          if (width > maxWidth || height > maxHeight) {
-            const ratio = Math.min(
-              maxWidth / width,
-              maxHeight / height
-            );
-
-            width = Math.round(width * ratio);
-            height = Math.round(height * ratio);
-          }
-
-          const canvas = document.createElement("canvas");
-
-          canvas.width = width;
-          canvas.height = height;
-
-          const context = canvas.getContext("2d");
-
-          context.drawImage(
-            image,
-            0,
-            0,
-            width,
-            height
-          );
-
-          // Compress image
-          const compressedImage =
-            canvas.toDataURL("image/jpeg", 0.75);
-
-          resolve(compressedImage);
-        };
-
-        image.onerror = () => {
-          reject(
-            new Error("Could not process image.")
-          );
-        };
-
-        image.src = event.target.result;
-      };
-
-      reader.onerror = () => {
-        reject(
-          new Error("Could not read image.")
-        );
-      };
-
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // =========================================================
-  // UPLOAD PHOTO
-  // =========================================================
-
-  const handlePhotoUpload = async (
-    activityId,
-    photoNumber,
-    file
-  ) => {
-    if (!file) return;
-
+  const fetchMembers = async () => {
     try {
-      const imageData = await processImage(file);
+      setMembersLoading(true);
 
-      const updatedActivities = activities.map(
-        (activity) =>
-          activity.uniqueId === activityId
-            ? {
-                ...activity,
-                [photoNumber]: imageData,
-              }
-            : activity
+      const response = await fetch(
+        "http://localhost:3000/api/members/list"
       );
 
-      saveActivities(updatedActivities);
-    } catch (error) {
-      console.error(
-        "Photo upload error:",
-        error
-      );
+      if (!response.ok) {
+        throw new Error("Failed to fetch members");
+      }
 
-      alert(
-        error.message ||
-          "Unable to upload the photo."
-      );
+      const data = await response.json();
+
+      setMembers(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Member Tracker Error:", err);
+      setError("Unable to load member information.");
+    } finally {
+      setMembersLoading(false);
     }
   };
 
   // =========================================================
-  // DELETE PHOTO
+  // OPEN MEMBER TRACKER
   // =========================================================
 
-  const deletePhoto = (
-    activityId,
-    photoNumber
-  ) => {
-    const photoName =
-      photoNumber === "photo1"
-        ? "Event Photo 1"
-        : "Event Photo 2";
+  const openMemberTracker = () => {
+    setActiveTab("members");
 
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${photoName}?`
-    );
-
-    if (!confirmed) return;
-
-    const updatedActivities = activities.map(
-      (activity) =>
-        activity.uniqueId === activityId
-          ? {
-              ...activity,
-              [photoNumber]: "",
-            }
-          : activity
-    );
-
-    saveActivities(updatedActivities);
-  };
-
-  // =========================================================
-  // SAVE REPORT
-  // =========================================================
-
-  const saveReport = (activityId) => {
-    const link =
-      reportInputs[activityId]?.trim();
-
-    if (!link) {
-      alert(
-        "Please paste a Google Drive report link."
-      );
-      return;
+    if (members.length === 0) {
+      fetchMembers();
     }
-
-    if (!link.startsWith("http")) {
-      alert(
-        "Please enter a valid Google Drive link."
-      );
-      return;
-    }
-
-    const updatedActivities = activities.map(
-      (activity) =>
-        activity.uniqueId === activityId
-          ? {
-              ...activity,
-              reportLink: link,
-              reportUploaded: true,
-            }
-          : activity
-    );
-
-    saveActivities(updatedActivities);
-
-    setReportInputs((prev) => ({
-      ...prev,
-      [activityId]: "",
-    }));
-
-    setEditingReport(null);
-  };
-
-  // =========================================================
-  // SAVE VIDEO
-  // =========================================================
-
-  const saveVideo = (activityId) => {
-    const link =
-      videoInputs[activityId]?.trim();
-
-    if (!link) {
-      alert(
-        "Please paste a Google Drive event video link."
-      );
-      return;
-    }
-
-    if (!link.startsWith("http")) {
-      alert(
-        "Please enter a valid Google Drive link."
-      );
-      return;
-    }
-
-    const updatedActivities = activities.map(
-      (activity) =>
-        activity.uniqueId === activityId
-          ? {
-              ...activity,
-              videoLink: link,
-            }
-          : activity
-    );
-
-    saveActivities(updatedActivities);
-
-    setVideoInputs((prev) => ({
-      ...prev,
-      [activityId]: "",
-    }));
-
-    setEditingVideo(null);
   };
 
   // =========================================================
   // LOGOUT
   // =========================================================
 
-  const handleLogout = () => {
+  const logout = () => {
     localStorage.removeItem("iicLoggedIn");
     localStorage.removeItem("iicRole");
     localStorage.removeItem("iicUsername");
@@ -420,1142 +97,1082 @@ function IICDashboard() {
   };
 
   // =========================================================
-  // ADD ACTIVITY
+  // FILTER EVENTS
   // =========================================================
 
-  const addActivity = () => {
-    if (
-      !newActivity.title.trim() ||
-      !newActivity.date.trim() ||
-      !newActivity.coordinator.trim() ||
-      !newActivity.department.trim()
-    ) {
-      alert(
-        "Please fill all activity details."
-      );
-      return;
+  const filteredEvents = useMemo(() => {
+    if (activeTab === "members") {
+      return [];
     }
 
-    const newId = `custom-${Date.now()}`;
+    // IIC EVENTS
+    // Self Driven events are also considered IIC events
+    if (activeTab === "iic") {
+      return events.filter(
+        (event) =>
+          (
+            event.activityType === "IIC" ||
+            event.activityType === "SELF_DRIVEN" ||
+            event.source === "SELF_DRIVEN"
+          ) &&
+          !event.isCelebration &&
+          event.activityType !== "CELEBRATION"
+      );
+    }
 
-    const activity = {
-      uniqueId: newId,
-      id: newId,
+    // CELEBRATION EVENTS
+    if (activeTab === "celebration") {
+      return events.filter(
+        (event) =>
+          event.isCelebration ||
+          event.activityType === "CELEBRATION"
+      );
+    }
 
-      title: newActivity.title.trim(),
+    // SELF DRIVEN EVENTS
+    if (activeTab === "self") {
+      return events.filter(
+        (event) =>
+          event.activityType === "SELF_DRIVEN" ||
+          event.source === "SELF_DRIVEN"
+      );
+    }
 
-      date: newActivity.date.trim(),
+    // MIC EVENTS
+    if (activeTab === "mic") {
+      return events.filter(
+        (event) =>
+          event.activityType === "MIC"
+      );
+    }
 
-      coordinator:
-        newActivity.coordinator.trim(),
+    // MIC LEVELS
+    if (
+      [
+        "basic",
+        "advanced",
+        "reskilling",
+        "upskilling",
+      ].includes(activeTab)
+    ) {
+      return events.filter(
+        (event) =>
+          event.activityType === "MIC" &&
+          (
+            event.level ||
+            event.micLevel ||
+            ""
+          ).toUpperCase() ===
+            activeTab.toUpperCase()
+      );
+    }
 
-      department:
-        newActivity.department.trim(),
+    return [];
+  }, [events, activeTab]);
 
-      status: newActivity.status,
+  // =========================================================
+  // EVENT STATS
+  // =========================================================
 
-      reportUploaded: false,
+  const stats = {
+    total: events.length,
 
-      reportLink: "",
+    iic: events.filter(
+      (event) =>
+        (
+          event.activityType === "IIC" ||
+          event.activityType === "SELF_DRIVEN" ||
+          event.source === "SELF_DRIVEN"
+        ) &&
+        !event.isCelebration &&
+        event.activityType !== "CELEBRATION"
+    ).length,
 
-      videoLink: "",
+    celebration: events.filter(
+      (event) =>
+        event.isCelebration ||
+        event.activityType === "CELEBRATION"
+    ).length,
 
-      // PHOTO FIELDS
-      photo1: "",
+    selfDriven: events.filter(
+      (event) =>
+        event.activityType === "SELF_DRIVEN" ||
+        event.source === "SELF_DRIVEN"
+    ).length,
 
-      photo2: "",
-    };
-
-    const updatedActivities = [
-      ...activities,
-      activity,
-    ];
-
-    saveActivities(updatedActivities);
-
-    setNewActivity({
-      title: "",
-      date: "",
-      coordinator: "",
-      department: "",
-      status: "Upcoming",
-    });
-
-    setShowAddActivity(false);
+    mic: events.filter(
+      (event) =>
+        event.activityType === "MIC"
+    ).length,
   };
 
   // =========================================================
-  // MARK COMPLETED
+  // DATE FORMAT
   // =========================================================
 
-  const markCompleted = (activityId) => {
-    const updatedActivities = activities.map(
-      (activity) =>
-        activity.uniqueId === activityId
-          ? {
-              ...activity,
-              status: "Completed",
-            }
-          : activity
+  const formatDate = (date) => {
+    if (!date) return "N/A";
+
+    const parsedDate = new Date(date);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return date;
+    }
+
+    return parsedDate.toLocaleDateString(
+      "en-IN",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }
+    );
+  };
+
+  // =========================================================
+  // MEMBER NAME NORMALIZATION
+  // =========================================================
+
+  const getMemberName = (member) => {
+    return (
+      member.facultyName ||
+      member.name ||
+      member.faculty ||
+      "Unknown Faculty"
+    );
+  };
+
+  // =========================================================
+  // MEMBER EVENTS
+  // =========================================================
+
+  const getMemberEvents = (member) => {
+    const memberName = getMemberName(member)
+      .trim()
+      .toLowerCase();
+
+    return events.filter((event) => {
+      const eventFaculty = (
+        event.facultyName ||
+        event.faculty ||
+        event.name ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+      return eventFaculty === memberName;
+    });
+  };
+
+  // =========================================================
+  // MEMBER STATS
+  // =========================================================
+
+  const getMemberStats = (member) => {
+    const memberEvents = getMemberEvents(member);
+
+    const iicEvents = memberEvents.filter(
+      (event) =>
+        (
+          event.activityType === "IIC" ||
+          event.activityType === "SELF_DRIVEN" ||
+          event.source === "SELF_DRIVEN"
+        ) &&
+        !event.isCelebration &&
+        event.activityType !== "CELEBRATION"
     );
 
-    saveActivities(updatedActivities);
+    const celebrationEvents = memberEvents.filter(
+      (event) =>
+        event.isCelebration ||
+        event.activityType === "CELEBRATION"
+    );
+
+    const selfDrivenEvents = memberEvents.filter(
+      (event) =>
+        event.activityType === "SELF_DRIVEN" ||
+        event.source === "SELF_DRIVEN"
+    );
+
+    const completedEvents = memberEvents.filter(
+      (event) =>
+        String(event.status || "")
+          .toUpperCase() === "COMPLETED"
+    );
+
+    return {
+      total: memberEvents.length,
+      iic: iicEvents.length,
+      celebration: celebrationEvents.length,
+      selfDriven: selfDrivenEvents.length,
+      completed: completedEvents.length,
+    };
   };
 
   // =========================================================
-  // STATISTICS
+  // GO DIRECTLY TO MEMBER DASHBOARD
   // =========================================================
 
-  const totalActivities =
-    activities.length;
+  const openMemberDashboard = (member) => {
+    const facultyName = getMemberName(member);
 
-  const completedActivities =
-    activities.filter(
-      (activity) =>
-        activity.status === "Completed"
-    ).length;
+    /*
+      We store the selected faculty temporarily.
 
-  const upcomingActivities =
-    activities.filter(
-      (activity) =>
-        activity.status === "Upcoming"
-    ).length;
+      MemberDashboard will read this value and show
+      the selected faculty's dashboard without requiring
+      the faculty member to log in again.
+    */
 
-  const resourcesCount =
-    activities.filter(
-      (activity) =>
-        activity.reportLink ||
-        activity.videoLink ||
-        activity.photo1 ||
-        activity.photo2
-    ).length;
+    localStorage.setItem(
+      "selectedMemberForIIC",
+      facultyName
+    );
+
+    navigate("/member-dashboard");
+  };
 
   // =========================================================
-  // UI
+  // LINK BUTTON
+  // =========================================================
+
+  const LinkButton = ({ url, text }) => {
+    if (!url) {
+      return (
+        <span className="text-gray-400 text-sm">
+          —
+        </span>
+      );
+    }
+
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+      >
+        {text}
+      </a>
+    );
+  };
+
+  // =========================================================
+  // SIDEBAR BUTTON
+  // =========================================================
+
+  const SidebarButton = ({
+    id,
+    children,
+    count,
+    onClick,
+  }) => {
+    const active = activeTab === id;
+
+    return (
+      <button
+        onClick={
+          onClick ||
+          (() => setActiveTab(id))
+        }
+        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left transition ${
+          active
+            ? "bg-blue-600 text-white shadow-md"
+            : "text-slate-700 hover:bg-blue-50"
+        }`}
+      >
+        <span>{children}</span>
+
+        {count !== undefined && (
+          <span
+            className={`text-xs px-2 py-1 rounded-full ${
+              active
+                ? "bg-white/20 text-white"
+                : "bg-slate-200 text-slate-600"
+            }`}
+          >
+            {count}
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  // =========================================================
+  // LOADING
+  // =========================================================
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="text-xl font-semibold text-slate-600">
+          Loading IIC Dashboard...
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================
+  // MAIN UI
   // =========================================================
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-slate-100 flex">
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+      {/* ================================================= */}
+      {/* SIDEBAR */}
+      {/* ================================================= */}
 
-      <div className="bg-gradient-to-r from-blue-800 to-indigo-800 text-white">
+      <aside className="w-72 bg-white border-r border-slate-200 min-h-screen fixed left-0 top-0">
 
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* LOGO / TITLE */}
 
-          <div className="flex justify-between items-center">
+        <div className="px-6 py-7 border-b border-slate-200">
 
-            <div>
+          <h1 className="text-2xl font-bold text-blue-700">
+            IIC Dashboard
+          </h1>
 
-              <p className="text-blue-200 text-sm">
-                Innovation & Entrepreneurship Cell
-              </p>
+          <p className="text-sm text-slate-500 mt-1">
+            {role}
+          </p>
 
-              <h1 className="text-4xl font-bold mt-1">
-                IIC Dashboard
-              </h1>
+        </div>
 
-              <p className="text-blue-100 mt-2">
-                Welcome, {role || "IIC Member"}
-              </p>
+        {/* NAVIGATION */}
+
+        <div className="p-4 space-y-2">
+
+          <p className="text-xs uppercase font-bold text-slate-400 px-3 mb-3">
+            Events
+          </p>
+
+          <SidebarButton
+            id="iic"
+            count={stats.iic}
+          >
+            IIC Events
+          </SidebarButton>
+
+          <SidebarButton
+            id="celebration"
+            count={stats.celebration}
+          >
+            Celebration Events
+          </SidebarButton>
+
+          <SidebarButton
+            id="self"
+            count={stats.selfDriven}
+          >
+            Self Driven Events
+          </SidebarButton>
+
+          <SidebarButton
+            id="mic"
+            count={stats.mic}
+          >
+            MIC Events
+          </SidebarButton>
+
+          {/* MIC SUBMENU */}
+
+          {activeTab === "mic" && (
+            <div className="ml-4 pl-3 border-l-2 border-blue-100 space-y-1">
+
+              <SidebarButton id="basic">
+                Basic
+              </SidebarButton>
+
+              <SidebarButton id="advanced">
+                Advanced
+              </SidebarButton>
+
+              <SidebarButton id="reskilling">
+                Reskilling
+              </SidebarButton>
+
+              <SidebarButton id="upskilling">
+                Upskilling
+              </SidebarButton>
 
             </div>
+          )}
 
+          {/* MEMBERS */}
 
-            <div className="flex items-center gap-4">
+          <div className="pt-6">
 
-              <div className="bg-white/10 px-5 py-3 rounded-xl">
+            <p className="text-xs uppercase font-bold text-slate-400 px-3 mb-3">
+              Members
+            </p>
 
-                <p className="text-xs text-blue-200">
-                  Logged in as
-                </p>
-
-                <p className="font-bold">
-                  {role || username}
-                </p>
-
-              </div>
-
-
-              <button
-                onClick={handleLogout}
-                className="bg-white text-blue-800 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition"
-              >
-                Logout
-              </button>
-
-            </div>
+            <SidebarButton
+              id="members"
+              onClick={openMemberTracker}
+            >
+              Member Tracker
+            </SidebarButton>
 
           </div>
 
         </div>
 
-      </div>
+        {/* USER / LOGOUT */}
 
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
 
-      {/* =====================================================
-          MAIN
-      ===================================================== */}
+          <div className="mb-3">
 
-      <div className="max-w-7xl mx-auto px-6 py-10">
+            <p className="font-semibold text-slate-800">
+              {localStorage.getItem("iicUsername")}
+            </p>
 
-        {/* TITLE */}
-
-        <div className="flex justify-between items-center mb-8">
-
-          <div>
-
-            <h2 className="text-3xl font-bold text-gray-800">
-              IIC Activity Management
-            </h2>
-
-            <p className="text-gray-500 mt-2">
-              Manage IIC events, reports, videos and event photos.
+            <p className="text-xs text-slate-500">
+              {role}
             </p>
 
           </div>
 
-
           <button
-            onClick={() =>
-              setShowAddActivity(true)
-            }
-            className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-xl font-semibold transition"
+            onClick={logout}
+            className="w-full py-2.5 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 font-medium"
           >
-            + Add Activity
+            Logout
           </button>
 
         </div>
 
+      </aside>
 
-        {/* =====================================================
-            STATISTICS
-        ===================================================== */}
+      {/* ================================================= */}
+      {/* MAIN CONTENT */}
+      {/* ================================================= */}
 
-        <div className="grid md:grid-cols-4 gap-5 mb-10">
+      <main className="ml-72 flex-1">
 
-          <div className="bg-white rounded-2xl shadow p-6">
+        {/* HEADER */}
 
-            <p className="text-gray-500">
-              Total Activities
-            </p>
+        <header className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 text-white px-10 py-8">
 
-            <p className="text-4xl font-bold text-blue-700 mt-2">
-              {totalActivities}
-            </p>
+          <div className="flex items-center justify-between">
 
-          </div>
+            <div>
 
+              <p className="text-blue-200 text-sm font-medium">
+                Innovation & Entrepreneurship Cell
+              </p>
 
-          <div className="bg-white rounded-2xl shadow p-6">
+              <h1 className="text-4xl font-bold mt-2">
+                {activeTab === "members"
+                  ? "Member Tracker"
+                  : role === "President"
+                  ? "President Dashboard"
+                  : "Vice President Dashboard"}
+              </h1>
 
-            <p className="text-gray-500">
-              Completed
-            </p>
+              <p className="text-blue-100 mt-2">
+                {activeTab === "members"
+                  ? "View faculty activity information and access individual member dashboards."
+                  : "Monitor institutional innovation activities, reports and events."}
+              </p>
 
-            <p className="text-4xl font-bold text-green-600 mt-2">
-              {completedActivities}
-            </p>
-
-          </div>
-
-
-          <div className="bg-white rounded-2xl shadow p-6">
-
-            <p className="text-gray-500">
-              Upcoming
-            </p>
-
-            <p className="text-4xl font-bold text-orange-500 mt-2">
-              {upcomingActivities}
-            </p>
-
-          </div>
-
-
-          <div className="bg-white rounded-2xl shadow p-6">
-
-            <p className="text-gray-500">
-              Reports / Videos / Photos
-            </p>
-
-            <p className="text-4xl font-bold text-purple-600 mt-2">
-              {resourcesCount}
-            </p>
-
-          </div>
-
-        </div>
-
-
-        {/* =====================================================
-            ACTIVITIES
-        ===================================================== */}
-
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
-
-          <div className="p-7 border-b">
-
-            <h2 className="text-2xl font-bold text-gray-800">
-              IIC Activities
-            </h2>
-
-            <p className="text-gray-500 mt-1">
-              All activities conducted by the Innovation & Entrepreneurship Cell.
-            </p>
-
-          </div>
-
-
-          {activities.length === 0 ? (
-
-            <div className="p-12 text-center text-gray-500">
-              No activities available.
             </div>
 
-          ) : (
+            <div className="bg-white/10 rounded-2xl px-6 py-4">
 
-            activities.map((activity) => (
+              <p className="text-sm text-blue-100">
+                Logged in as
+              </p>
 
-              <div
-                key={activity.uniqueId}
-                className="p-7 border-b last:border-b-0"
-              >
+              <p className="font-bold text-lg">
+                {role}
+              </p>
 
-                {/* =================================================
-                    ACTIVITY HEADER
-                ================================================= */}
+            </div>
 
-                <div>
+          </div>
 
-                  <div className="flex items-center gap-3 flex-wrap">
+        </header>
 
-                    <h3 className="text-2xl font-bold text-blue-700">
-                      {activity.title}
-                    </h3>
+        <div className="p-8">
 
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                        activity.status ===
-                        "Completed"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-orange-100 text-orange-700"
-                      }`}
-                    >
-                      {activity.status}
-                    </span>
+          {/* ================================================= */}
+          {/* MEMBER TRACKER */}
+          {/* ================================================= */}
 
-                  </div>
+          {activeTab === "members" ? (
 
-                </div>
+            <div>
 
+              {/* MEMBER TRACKER HEADER */}
 
-                {/* =================================================
-                    BASIC INFORMATION
-                ================================================= */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
 
-                <div className="grid md:grid-cols-3 gap-6 mt-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 
                   <div>
 
-                    <p className="text-gray-400 text-sm">
-                      Date
-                    </p>
+                    <h2 className="text-2xl font-bold text-slate-800">
+                      IIC Faculty Member Tracker
+                    </h2>
 
-                    <p className="font-semibold text-gray-800 mt-1">
-                      {activity.date}
-                    </p>
-
-                  </div>
-
-
-                  <div>
-
-                    <p className="text-gray-400 text-sm">
-                      Faculty / Coordinator
-                    </p>
-
-                    <p className="font-semibold text-gray-800 mt-1">
-                      {activity.coordinator}
+                    <p className="text-sm text-slate-500 mt-1">
+                      View each member's event participation and open their personalized dashboard.
                     </p>
 
                   </div>
 
-
-                  <div>
-
-                    <p className="text-gray-400 text-sm">
-                      Department
-                    </p>
-
-                    <p className="font-semibold text-gray-800 mt-1">
-                      {activity.department}
-                    </p>
-
+                  <div className="bg-blue-50 text-blue-700 px-4 py-3 rounded-xl font-semibold text-sm">
+                    {members.length} Members
                   </div>
-
-                </div>
-
-
-                {/* =================================================
-                    REPORT + VIDEO
-                ================================================= */}
-
-                <div className="grid md:grid-cols-2 gap-5 mt-7">
-
-                  {/* =================================================
-                      EVENT REPORT
-                  ================================================= */}
-
-                  <div className="border rounded-2xl p-4">
-
-                    <div className="flex items-center gap-2">
-
-                      <span className="text-xl">
-                        📄
-                      </span>
-
-                      <h4 className="font-bold text-lg">
-                        Event Report
-                      </h4>
-
-                    </div>
-
-
-                    <p className="text-gray-500 text-sm mt-2">
-                      Google Drive report link
-                    </p>
-
-
-                    {activity.reportLink &&
-                    editingReport !==
-                      activity.uniqueId ? (
-
-                      <div className="flex gap-3 mt-3 flex-wrap">
-
-                        <a
-                          href={
-                            activity.reportLink
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold transition"
-                        >
-                          View Report
-                        </a>
-
-
-                        <button
-                          onClick={() => {
-                            setEditingReport(
-                              activity.uniqueId
-                            );
-
-                            setReportInputs(
-                              (prev) => ({
-                                ...prev,
-                                [activity.uniqueId]:
-                                  "",
-                              })
-                            );
-                          }}
-                          className="bg-yellow-500 hover:bg-yellow-600 text-white px-5 py-2.5 rounded-xl font-semibold transition"
-                        >
-                          Upload Another Report
-                        </button>
-
-                      </div>
-
-                    ) : (
-
-                      <div className="mt-3">
-
-                        <input
-                          type="text"
-                          value={
-                            reportInputs[
-                              activity.uniqueId
-                            ] || ""
-                          }
-                          onChange={(e) =>
-                            setReportInputs(
-                              (prev) => ({
-                                ...prev,
-                                [activity.uniqueId]:
-                                  e.target.value,
-                              })
-                            )
-                          }
-                          placeholder="Paste Google Drive report link"
-                          className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-
-
-                        <div className="flex gap-3 mt-3">
-
-                          <button
-                            onClick={() =>
-                              saveReport(
-                                activity.uniqueId
-                              )
-                            }
-                            className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-semibold transition"
-                          >
-                            Save Report
-                          </button>
-
-
-                          {activity.reportLink && (
-
-                            <button
-                              onClick={() => {
-                                setEditingReport(
-                                  null
-                                );
-
-                                setReportInputs(
-                                  (prev) => ({
-                                    ...prev,
-                                    [activity.uniqueId]:
-                                      "",
-                                  })
-                                );
-                              }}
-                              className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2.5 rounded-xl font-semibold transition"
-                            >
-                              Cancel
-                            </button>
-
-                          )}
-
-                        </div>
-
-                      </div>
-
-                    )}
-
-                  </div>
-
-
-                  {/* =================================================
-                      EVENT VIDEO
-                  ================================================= */}
-
-                  <div className="border rounded-2xl p-4">
-
-                    <div className="flex items-center gap-2">
-
-                      <span className="text-xl">
-                        🎥
-                      </span>
-
-                      <h4 className="font-bold text-lg">
-                        Event Video
-                      </h4>
-
-                    </div>
-
-
-                    <p className="text-gray-500 text-sm mt-2">
-                      Google Drive event video link
-                    </p>
-
-
-                    {activity.videoLink &&
-                    editingVideo !==
-                      activity.uniqueId ? (
-
-                      <div className="flex gap-3 mt-3 flex-wrap">
-
-                        <a
-                          href={
-                            activity.videoLink
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-semibold transition"
-                        >
-                          View Event Video
-                        </a>
-
-
-                        <button
-                          onClick={() => {
-                            setEditingVideo(
-                              activity.uniqueId
-                            );
-
-                            setVideoInputs(
-                              (prev) => ({
-                                ...prev,
-                                [activity.uniqueId]:
-                                  "",
-                              })
-                            );
-                          }}
-                          className="bg-yellow-500 hover:bg-yellow-600 text-white px-5 py-2.5 rounded-xl font-semibold transition"
-                        >
-                          Upload Another Video
-                        </button>
-
-                      </div>
-
-                    ) : (
-
-                      <div className="mt-3">
-
-                        <input
-                          type="text"
-                          value={
-                            videoInputs[
-                              activity.uniqueId
-                            ] || ""
-                          }
-                          onChange={(e) =>
-                            setVideoInputs(
-                              (prev) => ({
-                                ...prev,
-                                [activity.uniqueId]:
-                                  e.target.value,
-                              })
-                            )
-                          }
-                          placeholder="Paste Google Drive video link"
-                          className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-purple-500"
-                        />
-
-
-                        <div className="flex gap-3 mt-3">
-
-                          <button
-                            onClick={() =>
-                              saveVideo(
-                                activity.uniqueId
-                              )
-                            }
-                            className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-semibold transition"
-                          >
-                            Save Video
-                          </button>
-
-
-                          {activity.videoLink && (
-
-                            <button
-                              onClick={() => {
-                                setEditingVideo(
-                                  null
-                                );
-
-                                setVideoInputs(
-                                  (prev) => ({
-                                    ...prev,
-                                    [activity.uniqueId]:
-                                      "",
-                                  })
-                                );
-                              }}
-                              className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2.5 rounded-xl font-semibold transition"
-                            >
-                              Cancel
-                            </button>
-
-                          )}
-
-                        </div>
-
-                      </div>
-
-                    )}
-
-                  </div>
-
-                </div>
-
-
-                {/* =================================================
-                    PHOTO 1 + PHOTO 2
-                ================================================= */}
-
-                <div className="grid md:grid-cols-2 gap-5 mt-5">
-
-                  {/* =================================================
-                      PHOTO 1
-                  ================================================= */}
-
-                  <div className="border rounded-2xl p-4">
-
-                    <div className="flex items-center gap-2">
-
-                      <span className="text-xl">
-                        📸
-                      </span>
-
-                      <h4 className="font-bold text-lg">
-                        Event Photo 1
-                      </h4>
-
-                    </div>
-
-
-                    <p className="text-gray-500 text-sm mt-2">
-                      Event photo
-                    </p>
-
-
-                    {activity.photo1 ? (
-
-                      <div className="mt-3">
-
-                        <img
-                          src={
-                            activity.photo1
-                          }
-                          alt="Event Photo 1"
-                          className="w-full h-48 object-cover rounded-xl border"
-                        />
-
-
-                        <div className="flex gap-3 mt-3 flex-wrap">
-
-                          {/* REPLACE */}
-
-                          <label>
-
-                            <span className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition">
-                              Replace Photo
-                            </span>
-
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                handlePhotoUpload(
-                                  activity.uniqueId,
-                                  "photo1",
-                                  e.target.files?.[0]
-                                );
-
-                                e.target.value =
-                                  "";
-                              }}
-                            />
-
-                          </label>
-
-
-                          {/* DELETE */}
-
-                          <button
-                            onClick={() =>
-                              deletePhoto(
-                                activity.uniqueId,
-                                "photo1"
-                              )
-                            }
-                            className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-semibold transition"
-                          >
-                            Delete Photo
-                          </button>
-
-                        </div>
-
-                      </div>
-
-                    ) : (
-
-                      <label className="inline-block mt-3">
-
-                        <span className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition">
-                          Upload Photo
-                        </span>
-
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            handlePhotoUpload(
-                              activity.uniqueId,
-                              "photo1",
-                              e.target.files?.[0]
-                            );
-
-                            e.target.value = "";
-                          }}
-                        />
-
-                      </label>
-
-                    )}
-
-                  </div>
-
-
-                  {/* =================================================
-                      PHOTO 2
-                  ================================================= */}
-
-                  <div className="border rounded-2xl p-4">
-
-                    <div className="flex items-center gap-2">
-
-                      <span className="text-xl">
-                        📸
-                      </span>
-
-                      <h4 className="font-bold text-lg">
-                        Event Photo 2
-                      </h4>
-
-                    </div>
-
-
-                    <p className="text-gray-500 text-sm mt-2">
-                      Event photo
-                    </p>
-
-
-                    {activity.photo2 ? (
-
-                      <div className="mt-3">
-
-                        <img
-                          src={
-                            activity.photo2
-                          }
-                          alt="Event Photo 2"
-                          className="w-full h-48 object-cover rounded-xl border"
-                        />
-
-
-                        <div className="flex gap-3 mt-3 flex-wrap">
-
-                          {/* REPLACE */}
-
-                          <label>
-
-                            <span className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition">
-                              Replace Photo
-                            </span>
-
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                handlePhotoUpload(
-                                  activity.uniqueId,
-                                  "photo2",
-                                  e.target.files?.[0]
-                                );
-
-                                e.target.value =
-                                  "";
-                              }}
-                            />
-
-                          </label>
-
-
-                          {/* DELETE */}
-
-                          <button
-                            onClick={() =>
-                              deletePhoto(
-                                activity.uniqueId,
-                                "photo2"
-                              )
-                            }
-                            className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-semibold transition"
-                          >
-                            Delete Photo
-                          </button>
-
-                        </div>
-
-                      </div>
-
-                    ) : (
-
-                      <label className="inline-block mt-3">
-
-                        <span className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold cursor-pointer transition">
-                          Upload Photo
-                        </span>
-
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            handlePhotoUpload(
-                              activity.uniqueId,
-                              "photo2",
-                              e.target.files?.[0]
-                            );
-
-                            e.target.value = "";
-                          }}
-                        />
-
-                      </label>
-
-                    )}
-
-                  </div>
-
-                </div>
-
-
-                {/* =================================================
-                    COMPLETION
-                ================================================= */}
-
-                <div className="mt-6">
-
-                  {activity.status ===
-                  "Completed" ? (
-
-                    <div className="inline-block bg-green-100 text-green-700 px-5 py-3 rounded-xl font-semibold">
-                      ✔ Activity Completed
-                    </div>
-
-                  ) : (
-
-                    <button
-                      onClick={() =>
-                        markCompleted(
-                          activity.uniqueId
-                        )
-                      }
-                      className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-semibold transition"
-                    >
-                      Mark as Completed
-                    </button>
-
-                  )}
 
                 </div>
 
               </div>
 
-            ))
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6">
+                  {error}
+                </div>
+              )}
+
+              {/* LOADING */}
+
+              {membersLoading ? (
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-16 text-center">
+
+                  <div className="text-3xl mb-3">
+                    🌀
+                  </div>
+
+                  <p className="font-semibold text-slate-600">
+                    Loading member information...
+                  </p>
+
+                </div>
+
+              ) : members.length === 0 ? (
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-16 text-center">
+
+                  <p className="text-lg font-bold text-slate-700">
+                    No members found.
+                  </p>
+
+                  <p className="text-sm text-slate-500 mt-2">
+                    Make sure the backend member list is available.
+                  </p>
+
+                </div>
+
+              ) : (
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+
+                  <div className="overflow-x-auto">
+
+                    <table className="min-w-[1200px] w-full">
+
+                      <thead className="bg-slate-50">
+
+                        <tr>
+
+                          <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                            S.No
+                          </th>
+
+                          <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                            Faculty Name
+                          </th>
+
+                          <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                            Department
+                          </th>
+
+                          <th className="px-5 py-4 text-center text-xs font-bold uppercase text-slate-500">
+                            Total Events
+                          </th>
+
+                          <th className="px-5 py-4 text-center text-xs font-bold uppercase text-slate-500">
+                            IIC
+                          </th>
+
+                          <th className="px-5 py-4 text-center text-xs font-bold uppercase text-slate-500">
+                            Celebration
+                          </th>
+
+                          <th className="px-5 py-4 text-center text-xs font-bold uppercase text-slate-500">
+                            Self Driven
+                          </th>
+
+                          <th className="px-5 py-4 text-center text-xs font-bold uppercase text-slate-500">
+                            Completed
+                          </th>
+
+                          <th className="px-5 py-4 text-center text-xs font-bold uppercase text-slate-500">
+                            Dashboard
+                          </th>
+
+                        </tr>
+
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+
+                        {members.map((member, index) => {
+
+                          const memberName =
+                            getMemberName(member);
+
+                          const memberStats =
+                            getMemberStats(member);
+
+                          return (
+
+                            <tr
+                              key={
+                                member._id ||
+                                member.id ||
+                                index
+                              }
+                              className="hover:bg-blue-50/50 transition"
+                            >
+
+                              {/* S.NO */}
+
+                              <td className="px-5 py-4 text-sm font-medium text-slate-600">
+                                {index + 1}
+                              </td>
+
+                              {/* FACULTY */}
+
+                              <td className="px-5 py-4">
+
+                                <div className="font-bold text-slate-800">
+                                  {memberName}
+                                </div>
+
+                                {member.email && (
+                                  <div className="text-xs text-slate-400 mt-1">
+                                    {member.email}
+                                  </div>
+                                )}
+
+                              </td>
+
+                              {/* DEPARTMENT */}
+
+                              <td className="px-5 py-4">
+
+                                <span className="inline-flex px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">
+                                  {member.department || "CMRIT"}
+                                </span>
+
+                              </td>
+
+                              {/* TOTAL */}
+
+                              <td className="px-5 py-4 text-center">
+
+                                <span className="inline-flex min-w-9 justify-center px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold">
+                                  {memberStats.total}
+                                </span>
+
+                              </td>
+
+                              {/* IIC */}
+
+                              <td className="px-5 py-4 text-center">
+
+                                <span className="font-bold text-blue-600">
+                                  {memberStats.iic}
+                                </span>
+
+                              </td>
+
+                              {/* CELEBRATION */}
+
+                              <td className="px-5 py-4 text-center">
+
+                                <span className="font-bold text-purple-600">
+                                  {memberStats.celebration}
+                                </span>
+
+                              </td>
+
+                              {/* SELF DRIVEN */}
+
+                              <td className="px-5 py-4 text-center">
+
+                                <span className="font-bold text-green-600">
+                                  {memberStats.selfDriven}
+                                </span>
+
+                              </td>
+
+                              {/* COMPLETED */}
+
+                              <td className="px-5 py-4 text-center">
+
+                                <span className="font-bold text-emerald-600">
+                                  {memberStats.completed}
+                                </span>
+
+                              </td>
+
+                              {/* DASHBOARD */}
+
+                              <td className="px-5 py-4 text-center">
+
+                                <button
+                                  onClick={() =>
+                                    openMemberDashboard(member)
+                                  }
+                                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition"
+                                >
+                                  Go to Dashboard →
+                                </button>
+
+                              </td>
+
+                            </tr>
+
+                          );
+
+                        })}
+
+                      </tbody>
+
+                    </table>
+
+                  </div>
+
+                </div>
+
+              )}
+
+            </div>
+
+          ) : (
+
+            <>
+              {/* ================================================= */}
+              {/* STAT CARDS */}
+              {/* ================================================= */}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
+
+                {/* TOTAL */}
+
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+
+                  <p className="text-slate-500 text-sm">
+                    Total Events
+                  </p>
+
+                  <p className="text-4xl font-bold mt-2">
+                    {stats.total}
+                  </p>
+
+                </div>
+
+                {/* IIC */}
+
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+
+                  <p className="text-slate-500 text-sm">
+                    IIC Events
+                  </p>
+
+                  <p className="text-4xl font-bold text-blue-600 mt-2">
+                    {stats.iic}
+                  </p>
+
+                </div>
+
+                {/* CELEBRATIONS */}
+
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+
+                  <p className="text-slate-500 text-sm">
+                    Celebrations
+                  </p>
+
+                  <p className="text-4xl font-bold text-purple-600 mt-2">
+                    {stats.celebration}
+                  </p>
+
+                </div>
+
+                {/* SELF DRIVEN */}
+
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+
+                  <p className="text-slate-500 text-sm">
+                    Self Driven
+                  </p>
+
+                  <p className="text-4xl font-bold text-green-600 mt-2">
+                    {stats.selfDriven}
+                  </p>
+
+                </div>
+
+                {/* MIC */}
+
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+
+                  <p className="text-slate-500 text-sm">
+                    MIC Events
+                  </p>
+
+                  <p className="text-4xl font-bold text-orange-500 mt-2">
+                    {stats.mic}
+                  </p>
+
+                </div>
+
+              </div>
+
+              {/* ERROR */}
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6">
+                  {error}
+                </div>
+              )}
+
+              {/* ================================================= */}
+              {/* EVENTS TABLE */}
+              {/* ================================================= */}
+
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+
+                <div className="px-6 py-5 border-b border-slate-200">
+
+                  <h2 className="text-2xl font-bold text-slate-800">
+
+                    {activeTab === "iic" &&
+                      "IIC Events"}
+
+                    {activeTab === "celebration" &&
+                      "Celebration Events"}
+
+                    {activeTab === "self" &&
+                      "Self Driven Events"}
+
+                    {activeTab === "mic" &&
+                      "MIC Events"}
+
+                    {activeTab === "basic" &&
+                      "MIC - Basic"}
+
+                    {activeTab === "advanced" &&
+                      "MIC - Advanced"}
+
+                    {activeTab === "reskilling" &&
+                      "MIC - Reskilling"}
+
+                    {activeTab === "upskilling" &&
+                      "MIC - Upskilling"}
+
+                  </h2>
+
+                  <p className="text-sm text-slate-500 mt-1">
+                    {filteredEvents.length} event(s)
+                  </p>
+
+                </div>
+
+                <div className="overflow-x-auto">
+
+                  <table className="min-w-[1400px] w-full">
+
+                    <thead className="bg-slate-50">
+
+                      <tr>
+
+                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                          S.No
+                        </th>
+
+                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                          Title
+                        </th>
+
+                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                          Date
+                        </th>
+
+                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                          Faculty / Coordinator
+                        </th>
+
+                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                          Department
+                        </th>
+
+                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                          Report
+                        </th>
+
+                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                          Poster
+                        </th>
+
+                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                          Video
+                        </th>
+
+                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                          Photos
+                        </th>
+
+                      </tr>
+
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100">
+
+                      {filteredEvents.length === 0 ? (
+
+                        <tr>
+
+                          <td
+                            colSpan="9"
+                            className="text-center py-16 text-slate-500"
+                          >
+                            No events found.
+                          </td>
+
+                        </tr>
+
+                      ) : (
+
+                        filteredEvents.map(
+                          (event, index) => (
+
+                            <tr
+                              key={event._id}
+                              className="hover:bg-slate-50"
+                            >
+
+                              <td className="px-5 py-4 font-medium">
+                                {index + 1}
+                              </td>
+
+                              <td className="px-5 py-4">
+
+                                <div className="font-semibold text-slate-800">
+                                  {event.title}
+                                </div>
+
+                                {event.category && (
+                                  <div className="text-xs text-slate-400 mt-1">
+                                    {event.category}
+                                  </div>
+                                )}
+
+                              </td>
+
+                              <td className="px-5 py-4 whitespace-nowrap">
+                                {formatDate(event.date)}
+                              </td>
+
+                              <td className="px-5 py-4">
+                                {event.facultyName || "N/A"}
+                              </td>
+
+                              <td className="px-5 py-4">
+                                {event.department || "N/A"}
+                              </td>
+
+                              <td className="px-5 py-4">
+
+                                <LinkButton
+                                  url={event.reportLink}
+                                  text="View Report"
+                                />
+
+                              </td>
+
+                              <td className="px-5 py-4">
+
+                                <LinkButton
+                                  url={event.posterLink}
+                                  text="View Poster"
+                                />
+
+                              </td>
+
+                              <td className="px-5 py-4">
+
+                                <LinkButton
+                                  url={event.videoLink}
+                                  text="Watch Video"
+                                />
+
+                              </td>
+
+                              <td className="px-5 py-4">
+
+                                {event.photos?.length > 0 ? (
+
+                                  <a
+                                    href={event.photos[0]}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                  >
+                                    View Photos
+                                  </a>
+
+                                ) : event.eventPhoto ? (
+
+                                  <a
+                                    href={event.eventPhoto}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                  >
+                                    View Photos
+                                  </a>
+
+                                ) : (
+
+                                  <span className="text-gray-400">
+                                    —
+                                  </span>
+
+                                )}
+
+                              </td>
+
+                            </tr>
+
+                          )
+                        )
+
+                      )}
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+
+              </div>
+
+            </>
 
           )}
 
         </div>
 
-      </div>
-
-
-      {/* =====================================================
-          ADD ACTIVITY MODAL
-      ===================================================== */}
-
-      {showAddActivity && (
-
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-5">
-
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8">
-
-            <div className="flex justify-between items-center mb-6">
-
-              <h2 className="text-2xl font-bold">
-                Add IIC Activity
-              </h2>
-
-
-              <button
-                onClick={() =>
-                  setShowAddActivity(false)
-                }
-                className="text-gray-500 hover:text-gray-800 text-2xl"
-              >
-                ×
-              </button>
-
-            </div>
-
-
-            <div className="space-y-4">
-
-              {/* TITLE */}
-
-              <div>
-
-                <label className="block font-semibold mb-2">
-                  Event Title
-                </label>
-
-                <input
-                  type="text"
-                  value={
-                    newActivity.title
-                  }
-                  onChange={(e) =>
-                    setNewActivity({
-                      ...newActivity,
-                      title:
-                        e.target.value,
-                    })
-                  }
-                  placeholder="Enter event title"
-                  className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-
-              </div>
-
-
-              {/* DATE */}
-
-              <div>
-
-                <label className="block font-semibold mb-2">
-                  Event Date
-                </label>
-
-                <input
-                  type="text"
-                  value={
-                    newActivity.date
-                  }
-                  onChange={(e) =>
-                    setNewActivity({
-                      ...newActivity,
-                      date:
-                        e.target.value,
-                    })
-                  }
-                  placeholder="Example: 16 Aug 2026"
-                  className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-
-              </div>
-
-
-              {/* FACULTY */}
-
-              <div>
-
-                <label className="block font-semibold mb-2">
-                  Faculty / Coordinator
-                </label>
-
-                <input
-                  type="text"
-                  value={
-                    newActivity.coordinator
-                  }
-                  onChange={(e) =>
-                    setNewActivity({
-                      ...newActivity,
-                      coordinator:
-                        e.target.value,
-                    })
-                  }
-                  placeholder="Enter faculty name"
-                  className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-
-              </div>
-
-
-              {/* DEPARTMENT */}
-
-              <div>
-
-                <label className="block font-semibold mb-2">
-                  Department
-                </label>
-
-                <input
-                  type="text"
-                  value={
-                    newActivity.department
-                  }
-                  onChange={(e) =>
-                    setNewActivity({
-                      ...newActivity,
-                      department:
-                        e.target.value,
-                    })
-                  }
-                  placeholder="Example: MCA"
-                  className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-
-              </div>
-
-
-              {/* STATUS */}
-
-              <div>
-
-                <label className="block font-semibold mb-2">
-                  Status
-                </label>
-
-                <select
-                  value={
-                    newActivity.status
-                  }
-                  onChange={(e) =>
-                    setNewActivity({
-                      ...newActivity,
-                      status:
-                        e.target.value,
-                    })
-                  }
-                  className="w-full border rounded-xl px-4 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                >
-
-                  <option value="Upcoming">
-                    Upcoming
-                  </option>
-
-                  <option value="Completed">
-                    Completed
-                  </option>
-
-                </select>
-
-              </div>
-
-            </div>
-
-
-            {/* BUTTONS */}
-
-            <div className="flex gap-4 mt-8">
-
-              <button
-                onClick={addActivity}
-                className="flex-1 bg-blue-700 hover:bg-blue-800 text-white py-3 rounded-xl font-semibold"
-              >
-                Add Activity
-              </button>
-
-
-              <button
-                onClick={() =>
-                  setShowAddActivity(false)
-                }
-                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-semibold"
-              >
-                Cancel
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      )}
+      </main>
 
     </div>
   );
