@@ -1,0 +1,817 @@
+import Event from "../models/Event.js";
+import path from "path";
+import fs from "fs";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+/*
+============================================================
+HELPER
+============================================================
+*/
+
+const genAI = new GoogleGenerativeAI(
+  process.env.GEMINI_API_KEY
+);
+
+const GEMINI_MODELS = [
+  process.env.GEMINI_MODEL || "gemini-2.0-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash",
+];
+
+async function extractReportMetadataFromPDF(fileBuffer) {
+  const prompt = `
+You are an expert document extraction system.
+
+Analyze the attached event report PDF.
+
+Extract ONLY information that is actually present in the PDF.
+Do NOT invent, guess, or generate any URLs.
+
+The PDF may contain:
+- Event/poster links
+- Video links
+- Photo links
+- Google Drive links
+- Google Photos links
+- YouTube links
+- Instagram/social-media links
+- Other media/documentation links
+
+Return ONLY valid JSON.
+
+Required format:
+
+{
+  "posterLink": "",
+  "videoLink": "",
+  "photos": [],
+  "allLinks": []
+}
+
+Rules:
+
+1. posterLink:
+   Find the URL specifically referring to the event poster.
+   If no poster URL exists, return "".
+
+2. videoLink:
+   Find the URL specifically referring to the event video.
+   YouTube, Google Drive, Google Photos or other video URLs are acceptable.
+   If no video URL exists, return "".
+
+3. photos:
+   Extract URLs specifically referring to event photographs.
+   Return them as an array of strings.
+   If there are no photo URLs, return [].
+
+4. allLinks:
+   Return every actual HTTP/HTTPS URL found in the PDF.
+
+5. Never invent a URL.
+
+6. Do not convert ordinary text into a URL.
+
+7. Preserve URLs exactly as they appear.
+
+8. If multiple URLs could be poster/video/photo links, choose the ones whose surrounding text clearly identifies their purpose.
+
+Return ONLY JSON. No markdown. No explanation.
+`;
+
+  let lastError = null;
+
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+      });
+
+      const result = await model.generateContent([
+        {
+          inlineData: {
+            data: fileBuffer.toString("base64"),
+            mimeType: "application/pdf",
+          },
+        },
+        prompt,
+      ]);
+
+      const responseText =
+        result.response.text();
+
+      const cleanJson = responseText
+        .replace(/```json/gi, "")
+        .replace(/```/g, "")
+        .trim();
+
+      const parsed = JSON.parse(cleanJson);
+
+      return {
+        posterLink:
+          typeof parsed.posterLink === "string"
+            ? parsed.posterLink.trim()
+            : "",
+
+        videoLink:
+          typeof parsed.videoLink === "string"
+            ? parsed.videoLink.trim()
+            : "",
+
+        photos:
+          Array.isArray(parsed.photos)
+            ? parsed.photos.filter(
+                (url) =>
+                  typeof url === "string" &&
+                  url.trim()
+              )
+            : [],
+
+        allLinks:
+          Array.isArray(parsed.allLinks)
+            ? parsed.allLinks.filter(
+                (url) =>
+                  typeof url === "string" &&
+                  url.trim()
+              )
+            : [],
+      };
+    } catch (error) {
+      lastError = error;
+
+      console.warn(
+        `[Gemini Report Extraction] ${modelName} failed:`,
+        error.message
+      );
+    }
+  }
+
+  throw lastError;
+}
+
+
+const getUploadsDirectory = () => {
+  const uploadsDir = path.join(
+    process.cwd(),
+    "uploads",
+    "events"
+  );
+
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, {
+      recursive: true,
+    });
+  }
+
+  return uploadsDir;
+};
+
+/*
+============================================================
+GET ALL EVENTS
+============================================================
+
+President / Vice President will use this endpoint.
+
+Because we return the complete MongoDB Event document,
+the response includes:
+
+reportLink
+posterLink
+videoLink
+photos
+collegePhoto
+eventPhoto
+*/
+
+export const getEvents = async (
+  req,
+  res
+) => {
+  try {
+    const events = await Event.find({})
+      .sort({
+        date: -1,
+      })
+      .lean();
+
+    res.status(200).json(events);
+  } catch (error) {
+    console.error(
+      "getEvents Error:",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Failed to fetch events",
+      error: error.message,
+    });
+  }
+};
+
+/*
+============================================================
+GET SINGLE EVENT
+============================================================
+*/
+
+export const getEventById = async (
+  req,
+  res
+) => {
+  try {
+    const { id } = req.params;
+
+    const event =
+      await Event.findById(id);
+
+    if (!event) {
+      return res.status(404).json({
+        message: "Event not found",
+      });
+    }
+
+    res.status(200).json(event);
+  } catch (error) {
+    console.error(
+      "getEventById Error:",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Failed to fetch event",
+      error: error.message,
+    });
+  }
+};
+
+/*
+============================================================
+CREATE EVENT
+============================================================
+*/
+
+export const createEvent = async (
+  req,
+  res
+) => {
+  try {
+    const {
+      title,
+      department,
+      date,
+      time,
+      venue,
+      facultyName,
+      facultyEmail,
+      activityType,
+      category,
+      level,
+      isCelebration,
+      message,
+      status,
+      reportLink,
+      posterLink,
+      videoLink,
+      photos,
+      collegePhoto,
+      eventPhoto,
+      source,
+    } = req.body;
+
+    if (!title || !date) {
+      return res.status(400).json({
+        message:
+          "Title and date are required.",
+      });
+    }
+
+    const event = new Event({
+      title: title.trim(),
+
+      department:
+        department || "N/A",
+
+      date: new Date(date),
+
+      time:
+        time || "10:00 AM",
+
+      venue:
+        venue || "TBD",
+
+      facultyName:
+        facultyName ||
+        "Unknown",
+
+      facultyEmail:
+        facultyEmail || "",
+
+      activityType:
+        activityType || "IIC",
+
+      category:
+        category || "Workshop",
+
+      level:
+        level || "",
+
+      isCelebration:
+        Boolean(isCelebration),
+
+      message:
+        message || "",
+
+      status:
+        status || "UPCOMING",
+
+      /*
+      MEDIA
+      */
+
+      reportLink:
+        reportLink || "",
+
+      posterLink:
+        posterLink || "",
+
+      videoLink:
+        videoLink || "",
+
+      photos:
+        Array.isArray(photos)
+          ? photos
+          : [],
+
+      collegePhoto:
+        collegePhoto || "",
+
+      eventPhoto:
+        eventPhoto || "",
+
+      source:
+        source || "CALENDAR",
+    });
+
+    await event.save();
+
+    res.status(201).json({
+      message:
+        "Event created successfully!",
+      event,
+    });
+  } catch (error) {
+    console.error(
+      "createEvent Error:",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Failed to create event",
+      error: error.message,
+    });
+  }
+};
+
+/*
+============================================================
+UPDATE EVENT
+============================================================
+
+Used for status and normal event information.
+*/
+
+export const updateEvent = async (
+  req,
+  res
+) => {
+  try {
+    const { id } = req.params;
+
+    const allowedFields = [
+      "title",
+      "department",
+      "date",
+      "time",
+      "venue",
+      "facultyName",
+      "facultyEmail",
+      "activityType",
+      "category",
+      "level",
+      "isCelebration",
+      "message",
+      "status",
+      "reportLink",
+      "posterLink",
+      "videoLink",
+      "photos",
+      "collegePhoto",
+      "eventPhoto",
+      "source",
+    ];
+
+    const updateData = {};
+
+    allowedFields.forEach(
+      (field) => {
+        if (
+          req.body[field] !==
+          undefined
+        ) {
+          updateData[field] =
+            req.body[field];
+        }
+      }
+    );
+
+    const event =
+      await Event.findByIdAndUpdate(
+        id,
+        updateData,
+        {
+          new: true,
+          runValidators: true,
+        }
+      );
+
+    if (!event) {
+      return res.status(404).json({
+        message: "Event not found",
+      });
+    }
+
+    res.status(200).json({
+      message:
+        "Event updated successfully!",
+      event,
+    });
+  } catch (error) {
+    console.error(
+      "updateEvent Error:",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Failed to update event",
+      error: error.message,
+    });
+  }
+};
+
+/*
+============================================================
+UPDATE EVENT MEDIA
+============================================================
+
+This is the IMPORTANT endpoint.
+
+It persists:
+
+1. Report file
+2. Poster file
+3. Poster link
+4. Video link
+5. Multiple event photos
+
+directly into MongoDB.
+*/
+
+export const updateEventMedia =
+  async (req, res) => {
+    try {
+      const { id } =
+        req.params;
+
+      const event =
+        await Event.findById(id);
+
+      if (!event) {
+        return res.status(404).json({
+          message:
+            "Event not found",
+        });
+      }
+
+      const uploadsDir =
+        getUploadsDirectory();
+
+      /*
+      ========================================================
+      TEXT LINKS
+      ========================================================
+      */
+
+      if (
+        req.body.posterLink !==
+        undefined
+      ) {
+        event.posterLink =
+          String(
+            req.body.posterLink
+          ).trim();
+      }
+
+      if (
+        req.body.videoLink !==
+        undefined
+      ) {
+        event.videoLink =
+          String(
+            req.body.videoLink
+          ).trim();
+      }
+
+      /*
+      ========================================================
+      FILES
+      ========================================================
+      */
+
+      if (
+        req.files &&
+        Object.keys(req.files)
+          .length > 0
+      ) {
+        /*
+        ------------------------------------------------------
+        REPORT
+        ------------------------------------------------------
+        */
+
+        const reportFile = req.files.report;
+
+if (reportFile) {
+  const extension =
+    path.extname(reportFile.name) || ".pdf";
+
+  const filename =
+    `report_${event._id}_${Date.now()}${extension}`;
+
+  const filePath =
+    path.join(
+      uploadsDir,
+      filename
+    );
+
+  // ----------------------------------------------------------
+  // 1. Save the original PDF
+  // ----------------------------------------------------------
+
+  await reportFile.mv(filePath);
+
+  event.reportLink =
+    `http://localhost:3000/uploads/events/${filename}`;
+
+  // ----------------------------------------------------------
+  // 2. Extract media information FROM THE PDF
+  // ----------------------------------------------------------
+
+  try {
+    console.log(
+      "[Report Extraction] Analyzing uploaded PDF..."
+    );
+
+    const extracted =
+      await extractReportMetadataFromPDF(
+        reportFile.data
+      );
+
+    console.log(
+      "[Report Extraction] Extracted:",
+      extracted
+    );
+
+    // --------------------------------------------------------
+    // Poster
+    // --------------------------------------------------------
+
+    if (extracted.posterLink) {
+      event.posterLink =
+        extracted.posterLink;
+    }
+
+    // --------------------------------------------------------
+    // Video
+    // --------------------------------------------------------
+
+    if (extracted.videoLink) {
+      event.videoLink =
+        extracted.videoLink;
+    }
+
+    // --------------------------------------------------------
+    // Photos
+    // --------------------------------------------------------
+
+    if (
+      Array.isArray(extracted.photos) &&
+      extracted.photos.length > 0
+    ) {
+      event.photos = [
+        ...(event.photos || []),
+        ...extracted.photos,
+      ];
+    }
+
+    console.log(
+      "[Report Extraction] Media saved to event."
+    );
+
+  } catch (extractionError) {
+
+    console.error(
+      "[Report Extraction] Failed:",
+      extractionError.message
+    );
+
+    /*
+     IMPORTANT:
+
+     The report itself has already been saved.
+
+     Therefore, if Gemini extraction fails,
+     we don't delete the report.
+
+     The event will still contain:
+       reportLink
+
+     while poster/video/photos remain unchanged.
+    */
+  }
+}
+
+        /*
+        ------------------------------------------------------
+        POSTER
+        ------------------------------------------------------
+        */
+
+        const posterFile =
+          req.files.poster;
+
+        if (posterFile) {
+          const extension =
+            path.extname(
+              posterFile.name
+            ) || ".png";
+
+          const filename =
+            `poster_${event._id}_${Date.now()}${extension}`;
+
+          const filePath =
+            path.join(
+              uploadsDir,
+              filename
+            );
+
+          await posterFile.mv(
+            filePath
+          );
+
+          event.posterLink =
+            `http://localhost:3000/uploads/events/${filename}`;
+        }
+
+        /*
+        ------------------------------------------------------
+        PHOTOS
+        ------------------------------------------------------
+        */
+
+        let photoFiles =
+          req.files.photos;
+
+        if (photoFiles) {
+          if (
+            !Array.isArray(
+              photoFiles
+            )
+          ) {
+            photoFiles = [
+              photoFiles,
+            ];
+          }
+
+          const photoUrls = [];
+
+          for (
+            const photo of photoFiles
+          ) {
+            const extension =
+              path.extname(
+                photo.name
+              ) || ".jpg";
+
+            const filename =
+              `photo_${event._id}_${Date.now()}_${Math.random()
+                .toString(36)
+                .substring(
+                  2,
+                  8
+                )}${extension}`;
+
+            const filePath =
+              path.join(
+                uploadsDir,
+                filename
+              );
+
+            await photo.mv(
+              filePath
+            );
+
+            photoUrls.push(
+              `http://localhost:3000/uploads/events/${filename}`
+            );
+          }
+
+          /*
+          Add new photos to existing
+          photos instead of replacing them.
+          */
+
+          event.photos = [
+            ...(event.photos ||
+              []),
+            ...photoUrls,
+          ];
+        }
+      }
+
+      /*
+      ========================================================
+      SAVE TO MONGODB
+      ========================================================
+      */
+
+      await event.save();
+
+      /*
+      Return complete updated event.
+      */
+
+      res.status(200).json({
+        message:
+          "Event media updated successfully!",
+        event,
+      });
+    } catch (error) {
+      console.error(
+        "updateEventMedia Error:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Failed to update event media",
+        error: error.message,
+      });
+    }
+  };
+
+/*
+============================================================
+DELETE EVENT
+============================================================
+*/
+
+export const deleteEvent = async (
+  req,
+  res
+) => {
+  try {
+    const { id } =
+      req.params;
+
+    const event =
+      await Event.findByIdAndDelete(
+        id
+      );
+
+    if (!event) {
+      return res.status(404).json({
+        message: "Event not found",
+      });
+    }
+
+    res.status(200).json({
+      message:
+        "Event deleted successfully!",
+    });
+  } catch (error) {
+    console.error(
+      "deleteEvent Error:",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Failed to delete event",
+      error: error.message,
+    });
+  }
+};

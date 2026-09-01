@@ -1,602 +1,2170 @@
+
 import Event from "../models/Event.js";
-import nodemailer from "nodemailer";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
-// Helper function to obtain Nodemailer Gmail transporter
-const getTransporter = async () => {
-  const emailUser = (process.env.EMAIL_USER || "").trim();
-  const emailPass = (process.env.EMAIL_PASS || "").replace(/\s+/g, "").trim();
+/*
+============================================================
+UPLOAD DIRECTORY
+============================================================
+*/
 
-  if (!emailUser || !emailPass) {
-    const configError = new Error("Missing EMAIL_USER or EMAIL_PASS in backend/.env file. Please add your Gmail address and 16-character App Password to backend/.env.");
-    configError.code = "CONFIG_MISSING";
-    throw configError;
-  }
+const getUploadsDirectory = () => {
+  const uploadsDir = path.join(
+    process.cwd(),
+    "uploads",
+    "events"
+  );
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: emailUser,
-      pass: emailPass,
-    },
-  });
-
-  return {
-    transporter,
-    fromEmail: emailUser,
-    isTest: false,
-  };
-};
-
-export const getEvents = async (req, res) => {
-  try {
-    const events = await Event.find().sort({ date: 1 });
-    res.status(200).json(events);
-  } catch (error) {
-    console.error("getEvents Error:", error);
-    res.status(500).json({ message: "Failed to fetch events", error: error.message });
-  }
-};
-
-export const createEvent = async (req, res) => {
-  try {
-    const {
-      title,
-      department,
-      date,
-      time,
-      venue,
-      facultyName,
-      facultyEmail,
-      category,
-      message,
-      autoReminder,
-    } = req.body;
-
-    if (!title || !date) {
-      return res.status(400).json({ message: "Title and Date are required fields." });
-    }
-
-    const newEvent = new Event({
-      title,
-      department: department || "N/A",
-      date: new Date(date),
-      time: time || "10:00 AM",
-      venue: venue || "TBD",
-      facultyName: facultyName || "Unknown",
-      facultyEmail: facultyEmail || "",
-      category: category || "Workshop",
-      message: message || "",
-      autoReminder: !!autoReminder,
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, {
+      recursive: true,
     });
+  }
 
-    await newEvent.save();
+  return uploadsDir;
+};
 
-    // Trigger initial notification on the day event is added to calendar if faculty email is assigned
-    if (newEvent.facultyEmail && typeof newEvent.facultyEmail === "string" && newEvent.facultyEmail.trim()) {
+/*
+============================================================
+UNIQUE FILENAME
+============================================================
+*/
+
+const createFilename = (prefix, extension) => {
+  return `${prefix}_${Date.now()}_${Math.random()
+    .toString(36)
+    .substring(2, 8)}${extension}`;
+};
+
+/*
+============================================================
+BUFFER HASH
+============================================================
+*/
+
+const getBufferHash = (buffer) => {
+  return crypto
+    .createHash("sha256")
+    .update(buffer)
+    .digest("hex");
+};
+
+/*
+============================================================
+SERVER BASE URL
+============================================================
+*/
+
+const getServerBaseUrl = (req) => {
+  if (process.env.SERVER_URL) {
+    return process.env.SERVER_URL.replace(/\/$/, "");
+  }
+
+  const protocol =
+    req.headers["x-forwarded-proto"] ||
+    req.protocol ||
+    "http";
+
+  const host =
+    req.get("host") ||
+    "localhost:3000";
+
+  return `${protocol}://${host}`;
+};
+
+/*
+============================================================
+HELPER - EXTRACT VIDEO AND SOCIAL MEDIA LINKS FROM PDF
+============================================================
+*/
+
+const extractLinksFromPDF = async (pdfPath) => {
+  const result = {
+    videoLinks: [],
+    socialMediaLinks: [],
+  };
+
+  try {
+    const pdfData = new Uint8Array(
+      fs.readFileSync(pdfPath)
+    );
+
+    const pdf = await pdfjsLib
+      .getDocument({
+        data: pdfData,
+      })
+      .promise;
+
+    const allLinks = new Set();
+
+    /*
+    --------------------------------------------------------
+    PROCESS EVERY PDF PAGE
+    --------------------------------------------------------
+    */
+
+    for (
+      let pageNumber = 1;
+      pageNumber <= pdf.numPages;
+      pageNumber++
+    ) {
       try {
-        const mailClient = await getTransporter();
-        const { transporter, fromEmail } = mailClient;
-        const eventDateStr = new Date(newEvent.date).toLocaleDateString("en-US", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-        const eventTimeStr = newEvent.time || "10:00 AM";
-        const customMessage = newEvent.message && newEvent.message.trim()
-          ? newEvent.message.trim()
-          : "You have been assigned as the coordinating faculty for this event added to the calendar.";
+        const page = await pdf.getPage(
+          pageNumber
+        );
 
-        const mailOptions = {
-          from: `"CMRIT IIC Admin" <${fromEmail}>`,
-          to: newEvent.facultyEmail.trim(),
-          subject: `New Calendar Event Assigned: ${newEvent.title} - ${eventDateStr}`,
-          text: `Dear ${newEvent.facultyName || "Faculty Member"},\n\nThis is an official notification to inform you that you have been assigned to an event added to the calendar:\n\nEvent Name: ${newEvent.title}\nCategory: ${newEvent.category || "Workshop"}\nDate: ${eventDateStr}\nTime: ${eventTimeStr}\n\nNote / Description:\n${customMessage}\n\nPlease ensure all preparations are complete.\n\nBest regards,\nCMRIT IIC Admin Team`,
-          html: `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            </head>
-            <body style="margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f4f6f9; color: #333333;">
-              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 20px 0;">
-                <tr>
-                  <td align="center">
-                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
-                      <tr>
-                        <td style="background-color: #1e3a8a; padding: 25px 30px; text-align: left;">
-                          <h1 style="color: #ffffff; font-size: 20px; font-weight: 700; margin: 0;">CMRIT Institution's Innovation Council</h1>
-                          <p style="color: #93c5fd; font-size: 13px; margin: 5px 0 0 0; text-transform: uppercase; font-weight: 600;">Faculty Event Assignment Notification</p>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 30px 30px 15px 30px;">
-                          <p style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 10px 0;">Dear ${newEvent.facultyName || "Faculty Member"},</p>
-                          <p style="font-size: 14px; color: #475569; line-height: 1.6; margin: 0;">
-                            This is an official notification to inform you that you have been assigned to an event added to the CMRIT calendar today.
-                          </p>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 0 30px 20px 30px;">
-                          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 15px;">
-                            <tr>
-                              <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; width: 30%;">Event Title:</td>
-                              <td style="padding: 8px 12px; font-size: 14px; font-weight: 700; color: #0f172a;">${newEvent.title}</td>
-                            </tr>
-                            <tr>
-                              <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Date:</td>
-                              <td style="padding: 8px 12px; font-size: 14px; font-weight: 600; color: #2563eb; border-top: 1px solid #e2e8f0;">📅 ${eventDateStr}</td>
-                            </tr>
-                            <tr>
-                              <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Time:</td>
-                              <td style="padding: 8px 12px; font-size: 14px; font-weight: 600; color: #d97706; border-top: 1px solid #e2e8f0;">⏰ ${eventTimeStr}</td>
-                            </tr>
-                            <tr>
-                              <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Category:</td>
-                              <td style="padding: 8px 12px; font-size: 14px; color: #334155; border-top: 1px solid #e2e8f0;">🏷️ ${newEvent.category || "Workshop"}</td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 0 30px 25px 30px;">
-                          <div style="background-color: #eff6ff; border-left: 4px solid #2563eb; padding: 15px; border-radius: 4px;">
-                            <h4 style="margin: 0 0 6px 0; font-size: 13px; text-transform: uppercase; color: #1e40af; font-weight: 700;">Personalized Event Note:</h4>
-                            <p style="margin: 0; font-size: 14px; color: #1e3a8a; line-height: 1.5; font-style: italic;">
-                              "${customMessage}"
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 20px 30px; background-color: #f1f5f9; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center;">
-                          <p style="margin: 0 0 4px 0; font-weight: 600;">CMR Institute of Technology - IIC Admin Office</p>
-                          <p style="margin: 0;">This is an automated operational notification.</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </body>
-            </html>
-          `,
-        };
+        /*
+        ------------------------------------------------------
+        1. EXTRACT LINKS FROM PDF ANNOTATIONS
+        ------------------------------------------------------
+        */
 
-        await transporter.sendMail(mailOptions);
-        newEvent.addedDayReminderSent = true;
-        newEvent.lastReminderDate = new Date();
-        await newEvent.save();
-        console.log(`[Event Creation] Initial email sent to ${newEvent.facultyEmail} for event "${newEvent.title}"`);
-      } catch (emailErr) {
-        console.error("[Event Creation] Failed to send creation email:", emailErr.message);
+        const annotations =
+          await page.getAnnotations();
+
+        for (const annotation of annotations) {
+          if (
+            annotation.subtype === "Link" &&
+            annotation.url
+          ) {
+            allLinks.add(
+              annotation.url.trim()
+            );
+          }
+
+          /*
+          Some PDFs store the URL inside a
+          URI action.
+          */
+
+          if (
+            annotation.action === "URI" &&
+            annotation.url
+          ) {
+            allLinks.add(
+              annotation.url.trim()
+            );
+          }
+        }
+
+        /*
+        ------------------------------------------------------
+        2. EXTRACT PLAIN TEXT URLS
+        ------------------------------------------------------
+        */
+
+        const textContent =
+          await page.getTextContent();
+
+        const pageText =
+          textContent.items
+            .map(
+              (item) =>
+                item.str || ""
+            )
+            .join(" ");
+
+        /*
+        Match URLs beginning with:
+        http://
+        https://
+        www.
+        */
+
+        const urlRegex =
+          /(?:https?:\/\/|www\.)[^\s<>"')]+/gi;
+
+        const textUrls =
+          pageText.match(
+            urlRegex
+          ) || [];
+
+        for (let url of textUrls) {
+          url = url
+            .trim()
+            .replace(
+              /[.,;:!?]+$/,
+              ""
+            );
+
+          if (url.startsWith("www.")) {
+            url = `https://${url}`;
+          }
+
+          allLinks.add(url);
+        }
+      } catch (pageError) {
+        console.error(
+          `Could not extract links from PDF page ${pageNumber}:`,
+          pageError.message
+        );
       }
     }
 
-    res.status(201).json({ message: "Event created successfully", event: newEvent });
-  } catch (error) {
-    console.error("createEvent Error:", error);
-    res.status(500).json({ message: "Failed to create event", error: error.message });
-  }
-};
+    /*
+    --------------------------------------------------------
+    CLASSIFY LINKS
+    --------------------------------------------------------
+    */
 
-export const bulkUpload = async (req, res) => {
-  try {
-    const events = req.body;
-    if (!Array.isArray(events) || events.length === 0) {
-      return res.status(400).json({ message: "Invalid event data" });
+    for (const rawUrl of allLinks) {
+      try {
+        const url = new URL(rawUrl);
+
+        const hostname =
+          url.hostname
+            .toLowerCase()
+            .replace(/^www\./, "");
+
+        /*
+        ------------------------------------------------------
+        VIDEO PLATFORMS
+        ------------------------------------------------------
+        */
+
+        const isVideo =
+          hostname === "youtube.com" ||
+          hostname === "youtu.be" ||
+          hostname === "youtube-nocookie.com" ||
+          hostname === "vimeo.com" ||
+          hostname === "dailymotion.com" ||
+          hostname === "drive.google.com";
+
+        if (isVideo) {
+          result.videoLinks.push(
+            url.href
+          );
+
+          continue;
+        }
+
+        /*
+        ------------------------------------------------------
+        SOCIAL MEDIA
+        ------------------------------------------------------
+        */
+
+        let platform = null;
+
+        if (
+          hostname === "instagram.com"
+        ) {
+          platform = "Instagram";
+        } else if (
+          hostname === "facebook.com" ||
+          hostname === "fb.com"
+        ) {
+          platform = "Facebook";
+        } else if (
+          hostname === "linkedin.com"
+        ) {
+          platform = "LinkedIn";
+        } else if (
+          hostname === "twitter.com" ||
+          hostname === "x.com"
+        ) {
+          platform = "X";
+        } else if (
+          hostname === "tiktok.com"
+        ) {
+          platform = "TikTok";
+        }
+
+        if (platform) {
+          result.socialMediaLinks.push({
+            platform,
+            url: url.href,
+          });
+        }
+      } catch (urlError) {
+        console.log(
+          "Invalid URL skipped:",
+          rawUrl
+        );
+      }
     }
-    for (const evt of events) {
-      await Event.updateOne(
-        { title: evt.title, date: evt.date },
-        { $set: evt },
-        { upsert: true }
+
+    /*
+    --------------------------------------------------------
+    REMOVE DUPLICATES
+    --------------------------------------------------------
+    */
+
+    result.videoLinks = [
+      ...new Set(
+        result.videoLinks
+      ),
+    ];
+
+    const socialMap =
+      new Map();
+
+    for (
+      const social of
+        result.socialMediaLinks
+    ) {
+      socialMap.set(
+        social.url,
+        social
       );
     }
-    res.status(201).json({ message: "Events uploaded successfully" });
+
+    result.socialMediaLinks =
+      [...socialMap.values()];
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "PDF LINK EXTRACTION COMPLETE"
+    );
+
+    console.log(
+      "Video links:",
+      result.videoLinks
+    );
+
+    console.log(
+      "Social media links:",
+      result.socialMediaLinks
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    return result;
   } catch (error) {
-    console.error("bulkUpload Error:", error);
-    res.status(500).json({ message: "Failed to upload events", error: error.message });
+    console.error(
+      "PDF link extraction failed:",
+      error.message
+    );
+
+    return result;
   }
 };
 
-export const updateReminderSettings = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { autoReminder, facultyEmail, time, message, category, venue, department, facultyName } = req.body;
+/*
+============================================================
+PDF.JS NODE CANVAS FACTORY
 
-    const event = await Event.findById(id);
-    if (!event) return res.status(404).json({ message: "Event not found" });
+PDF.js needs a canvas factory when rendering PDFs in Node.
 
-    if (autoReminder !== undefined) event.autoReminder = autoReminder;
-    if (facultyEmail !== undefined) event.facultyEmail = facultyEmail;
-    if (time !== undefined) event.time = time;
-    if (message !== undefined) event.message = message;
-    if (category !== undefined) event.category = category;
-    if (venue !== undefined) event.venue = venue;
-    if (department !== undefined) event.department = department;
-    if (facultyName !== undefined) event.facultyName = facultyName;
-    
-    if (autoReminder) {
-      event.reminderSent = false;
-    }
-    
-    await event.save();
-    res.status(200).json({ message: "Settings updated successfully", event });
-  } catch (error) {
-    res.status(500).json({ message: "Failed to update settings", error: error.message });
+We explicitly use node-canvas instead of relying on PDF.js
+to discover the canvas package automatically.
+============================================================
+*/
+
+class NodeCanvasFactory {
+  async create(width, height) {
+    const { createCanvas } = await import("canvas");
+
+    const canvas = createCanvas(
+      Math.ceil(width),
+      Math.ceil(height)
+    );
+
+    const context = canvas.getContext("2d");
+
+    return {
+      canvas,
+      context,
+    };
   }
-};
 
-export const sendManualReminder = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { facultyEmail, time, message } = req.body;
-    
-    const event = await Event.findById(id);
-    if (!event) return res.status(404).json({ message: "Event not found" });
-    
-    if (facultyEmail) event.facultyEmail = facultyEmail;
-    if (time) event.time = time;
-    if (message !== undefined) event.message = message;
-    
-    // 1. Input Data & Email Format Validation
-    if (!event.facultyEmail || typeof event.facultyEmail !== 'string' || !event.facultyEmail.trim()) {
-      return res.status(400).json({ message: "Faculty email address is required." });
+  reset(canvasAndContext, width, height) {
+    if (!canvasAndContext) {
+      return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(event.facultyEmail.trim())) {
-      return res.status(400).json({ 
-        message: `Invalid email format: "${event.facultyEmail}". Please provide a valid recipient email address.` 
-      });
+    canvasAndContext.canvas.width =
+      Math.ceil(width);
+
+    canvasAndContext.canvas.height =
+      Math.ceil(height);
+  }
+
+  destroy(canvasAndContext) {
+    if (!canvasAndContext) {
+      return;
     }
 
-    // 2. Transporter Initialization
-    let mailClient;
-    try {
-      mailClient = await getTransporter();
-    } catch (transporterErr) {
-      console.error("[Email Dispatch Error] Transporter Initialization:", transporterErr);
-      return res.status(400).json({
-        message: "Email Service Unconfigured: Missing EMAIL_USER or EMAIL_PASS in backend/.env file."
-      });
+    if (canvasAndContext.canvas) {
+      canvasAndContext.canvas.width = 0;
+      canvasAndContext.canvas.height = 0;
     }
 
-    const { transporter, fromEmail, isTest } = mailClient;
+    canvasAndContext.canvas = null;
+    canvasAndContext.context = null;
+  }
+}
 
-    const eventDateStr = new Date(event.date).toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
+/*
+============================================================
+RENDER COMPLETE PDF PAGE
+
+IMPORTANT:
+
+We render the WHOLE page instead of extracting individual
+embedded images.
+
+This avoids problems with unresolved PDF image objects such
+as:
+
+Requesting object that isn't resolved yet
+Image or Canvas expected
+
+The complete rendered page is then sent to Gemini.
+============================================================
+*/
+
+const renderPdfPageAsPng = async (
+  page,
+  uploadsDir,
+  pageNumber
+) => {
+  const canvasFactory =
+    new NodeCanvasFactory();
+
+  /*
+  Higher resolution helps Gemini read poster text.
+  */
+
+  const scale = 2;
+
+  const viewport =
+    page.getViewport({
+      scale,
     });
-    const eventTimeStr = event.time || "10:00 AM";
-    const customMessage = event.message && event.message.trim()
-      ? event.message.trim()
-      : "You are assigned as the coordinating faculty for this upcoming event. Please review all schedule details and prepare the necessary arrangements.";
 
-    // 3. Email Template & Anti-Spam Headers Construction
-    const mailOptions = {
-      from: `"CMRIT IIC Admin" <${fromEmail}>`,
-      replyTo: fromEmail,
-      to: event.facultyEmail.trim(),
-      subject: `Reminder: ${event.title} - ${eventDateStr} at ${eventTimeStr}`,
-      // Plain text fallback (critical for passing Gmail spam & promotions filters)
-      text: `Dear ${event.facultyName || "Faculty Member"},\n\nThis is an official reminder regarding your assigned event:\n\nEvent Name: ${event.title}\nCategory: ${event.category || "Workshop"}\nDate: ${eventDateStr}\nTime: ${eventTimeStr}\n\nNote / Description:\n${customMessage}\n\nPlease ensure all preparations are complete.\n\nBest regards,\nCMRIT IIC Admin Team`,
-      // Clean, professional HTML layout matching standard Inbox design guidelines
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f4f6f9; color: #333333;">
-          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 20px 0;">
-            <tr>
-              <td align="center">
-                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
-                  
-                  <!-- Header Banner -->
-                  <tr>
-                    <td style="background-color: #1e3a8a; padding: 25px 30px; text-align: left;">
-                      <h1 style="color: #ffffff; font-size: 20px; font-weight: 700; margin: 0; letter-spacing: 0.5px;">CMRIT Institution's Innovation Council</h1>
-                      <p style="color: #93c5fd; font-size: 13px; margin: 5px 0 0 0; text-transform: uppercase; font-weight: 600;">Official Faculty Event Reminder</p>
-                    </td>
-                  </tr>
+  const canvasAndContext =
+    await canvasFactory.create(
+      viewport.width,
+      viewport.height
+    );
 
-                  <!-- Greeting & Introductory Text -->
-                  <tr>
-                    <td style="padding: 30px 30px 15px 30px;">
-                      <p style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 10px 0;">Dear ${event.facultyName || "Faculty Member"},</p>
-                      <p style="font-size: 14px; color: #475569; line-height: 1.6; margin: 0;">
-                        This is an official notification to remind you of your scheduled faculty event responsibility at CMR Institute of Technology.
-                      </p>
-                    </td>
-                  </tr>
+  const {
+    canvas,
+    context,
+  } = canvasAndContext;
 
-                  <!-- Detailed Event Card Table -->
-                  <tr>
-                    <td style="padding: 0 30px 20px 30px;">
-                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 15px;">
-                        <tr>
-                          <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; width: 30%;">Event Title:</td>
-                          <td style="padding: 8px 12px; font-size: 14px; font-weight: 700; color: #0f172a;">${event.title}</td>
-                        </tr>
-                        <tr>
-                          <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Date:</td>
-                          <td style="padding: 8px 12px; font-size: 14px; font-weight: 600; color: #2563eb; border-top: 1px solid #e2e8f0;">📅 ${eventDateStr}</td>
-                        </tr>
-                        <tr>
-                          <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Time:</td>
-                          <td style="padding: 8px 12px; font-size: 14px; font-weight: 600; color: #d97706; border-top: 1px solid #e2e8f0;">⏰ ${eventTimeStr}</td>
-                        </tr>
-                        <tr>
-                          <td style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569; border-top: 1px solid #e2e8f0;">Category:</td>
-                          <td style="padding: 8px 12px; font-size: 14px; color: #334155; border-top: 1px solid #e2e8f0;">🏷️ ${event.category || "Workshop"}</td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
+  /*
+  White background.
+  */
 
-                  <!-- Personalized Message Box -->
-                  <tr>
-                    <td style="padding: 0 30px 25px 30px;">
-                      <div style="background-color: #eff6ff; border-left: 4px solid #2563eb; padding: 15px; border-radius: 4px;">
-                        <h4 style="margin: 0 0 6px 0; font-size: 13px; text-transform: uppercase; color: #1e40af; font-weight: 700;">Personalized Event Note:</h4>
-                        <p style="margin: 0; font-size: 14px; color: #1e3a8a; line-height: 1.5; font-style: italic;">
-                          "${customMessage}"
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
+  context.save();
 
-                  <!-- Footer / Signature -->
-                  <tr>
-                    <td style="padding: 20px 30px; background-color: #f1f5f9; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
-                      <p style="margin: 0 0 4px 0; font-weight: 600; color: #475569;">CMR Institute of Technology - IIC Admin Office</p>
-                      <p style="margin: 0;">This is an automated operational notification. Please contact the IIC Coordinator for schedule adjustments.</p>
-                    </td>
-                  </tr>
+  context.fillStyle = "#ffffff";
 
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
-      `,
+  context.fillRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  context.restore();
+
+  /*
+  Render PDF page.
+  */
+
+  const renderContext = {
+    canvasContext: context,
+    viewport,
+
+    /*
+    Give PDF.js the same factory so that any
+    additional canvases it needs can be created.
+    */
+
+    canvasFactory,
+  };
+
+  try {
+    const renderTask =
+      page.render(renderContext);
+
+    await renderTask.promise;
+
+    /*
+    Convert rendered page to PNG.
+    */
+
+    const buffer =
+      canvas.toBuffer("image/png");
+
+    const filename =
+      createFilename(
+        `pdf_page_${pageNumber}`,
+        ".png"
+      );
+
+    const filePath =
+      path.join(
+        uploadsDir,
+        filename
+      );
+
+    fs.writeFileSync(
+      filePath,
+      buffer
+    );
+
+    return {
+      filePath,
+      width: canvas.width,
+      height: canvas.height,
+    };
+  } finally {
+    canvasFactory.destroy(
+      canvasAndContext
+    );
+  }
+};
+
+/*
+============================================================
+GEMINI IMAGE CLASSIFICATION
+============================================================
+
+Returns:
+
+poster
+event_photo
+other
+
+If Gemini fails, we return "unknown" rather than
+incorrectly treating the image as an event photo.
+
+This is VERY important.
+============================================================
+*/
+
+const classifyImageWithGemini =
+  async (filePath) => {
+    try {
+      const apiKey =
+        process.env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        console.warn(
+          "GEMINI_API_KEY is not configured."
+        );
+
+        return {
+          classification: "unknown",
+          hasFace: false,
+          faceCount: 0,
+        };
+      }
+
+      if (
+        !fs.existsSync(filePath)
+      ) {
+        console.error(
+          "Image does not exist:",
+          filePath
+        );
+
+        return {
+          classification: "unknown",
+          hasFace: false,
+          faceCount: 0,
+        };
+      }
+
+      const imageBuffer =
+        fs.readFileSync(filePath);
+
+      const base64Image =
+        imageBuffer.toString("base64");
+
+      const prompt = `
+You are analyzing one complete page from a college
+event report PDF.
+
+Your job is to determine whether the page is:
+
+1. poster
+2. event_photo
+3. other
+
+Return ONLY valid JSON.
+
+Required format:
+
+{
+  "classification": "poster",
+  "hasFace": true,
+  "faceCount": 1
+}
+
+classification MUST be exactly one of:
+
+"poster"
+"event_photo"
+"other"
+
+============================================================
+POSTER
+============================================================
+
+Use "poster" when the page is primarily an event
+announcement or promotional design.
+
+Examples:
+
+- Event poster
+- Workshop poster
+- Seminar poster
+- FDP poster
+- Conference poster
+- Hackathon poster
+- Invitation
+- Promotional event graphic
+
+A poster can contain photographs of people.
+
+The presence of a face DOES NOT make something an
+event_photo.
+
+Ask:
+
+"Was this designed to announce or promote the event?"
+
+If yes:
+
+poster
+
+============================================================
+EVENT PHOTO
+============================================================
+
+Use "event_photo" when the page/image is an actual
+photograph taken during the event.
+
+Examples:
+
+- Students attending an event
+- Audience
+- Speaker on stage
+- Faculty and students
+- Workshop activity
+- Group photograph
+- Certificate distribution
+- Award ceremony
+- Laboratory activity
+- Guest lecture photograph
+
+Ask:
+
+"Does this look like a real photograph taken during
+the event?"
+
+If yes:
+
+event_photo
+
+============================================================
+OTHER
+============================================================
+
+Use "other" for:
+
+- Feedback forms
+- Screenshots
+- Emails
+- WhatsApp screenshots
+- Website screenshots
+- Tables
+- Charts
+- Text-only pages
+- Attendance sheets
+- Certificates
+- Logos
+- Decorative graphics
+- Blank pages
+- Irrelevant documents
+- Anything that is neither a poster nor an event photo
+
+============================================================
+FACE DETECTION
+============================================================
+
+hasFace:
+
+true if clearly visible human faces exist.
+
+false if there are no visible human faces.
+
+faceCount:
+
+Approximate number of clearly visible human faces.
+
+Do not count:
+
+- Cartoon faces
+- Logos
+- Drawings
+- Extremely tiny/unrecognizable faces
+
+If a poster contains a photograph of a person's face,
+that DOES count as a face.
+
+IMPORTANT:
+
+Face detection does NOT determine classification.
+
+A poster containing faces is still:
+
+"poster"
+
+============================================================
+PRIMARY PURPOSE RULE
+============================================================
+
+Ask:
+
+"What is the PRIMARY PURPOSE of this page?"
+
+Designed to announce/promote an event:
+poster
+
+Actual photograph taken during an event:
+event_photo
+
+Everything else:
+other
+
+Return ONLY JSON.
+`;
+
+      const url =
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+      const response =
+        await fetch(url, {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: prompt,
+                  },
+
+                  {
+                    inline_data: {
+                      mime_type:
+                        "image/png",
+
+                      data:
+                        base64Image,
+                    },
+                  },
+                ],
+              },
+            ],
+
+            generationConfig: {
+              temperature: 0,
+
+              responseMimeType:
+                "application/json",
+            },
+          }),
+        });
+
+      /*
+      --------------------------------------------------------
+      GEMINI HTTP ERROR
+      --------------------------------------------------------
+      */
+
+      if (!response.ok) {
+        const errorText =
+          await response.text();
+
+        console.error(
+          "Gemini classification failed:",
+          errorText
+        );
+
+        return {
+          classification: "unknown",
+          hasFace: false,
+          faceCount: 0,
+        };
+      }
+
+      const data =
+        await response.json();
+
+      let result =
+        data?.candidates?.[0]
+          ?.content?.parts?.[0]
+          ?.text
+          ?.trim();
+
+      if (!result) {
+        console.error(
+          "Gemini returned empty response."
+        );
+
+        return {
+          classification: "unknown",
+          hasFace: false,
+          faceCount: 0,
+        };
+      }
+
+      /*
+      --------------------------------------------------------
+      REMOVE MARKDOWN CODE FENCES
+      --------------------------------------------------------
+      */
+
+      result = result
+        .replace(
+          /^```json\s*/i,
+          ""
+        )
+        .replace(
+          /^```\s*/i,
+          ""
+        )
+        .replace(
+          /\s*```$/i,
+          ""
+        )
+        .trim();
+
+      /*
+      --------------------------------------------------------
+      PARSE JSON
+      --------------------------------------------------------
+      */
+
+      let parsed;
+
+      try {
+        parsed =
+          JSON.parse(result);
+      } catch (error) {
+        console.error(
+          "Could not parse Gemini JSON:",
+          result
+        );
+
+        return {
+          classification: "unknown",
+          hasFace: false,
+          faceCount: 0,
+        };
+      }
+
+      /*
+      --------------------------------------------------------
+      VALIDATE CLASSIFICATION
+      --------------------------------------------------------
+      */
+
+      let classification =
+        String(
+          parsed.classification ||
+            ""
+        )
+          .trim()
+          .toLowerCase();
+
+      if (
+        ![
+          "poster",
+          "event_photo",
+          "other",
+        ].includes(
+          classification
+        )
+      ) {
+        classification =
+          "unknown";
+      }
+
+      /*
+      --------------------------------------------------------
+      FACE INFORMATION
+      --------------------------------------------------------
+      */
+
+      const hasFace =
+        Boolean(
+          parsed.hasFace
+        );
+
+      let faceCount =
+        Number(
+          parsed.faceCount
+        );
+
+      if (
+        !Number.isFinite(
+          faceCount
+        ) ||
+        faceCount < 0
+      ) {
+        faceCount = 0;
+      }
+
+      faceCount =
+        Math.round(
+          faceCount
+        );
+
+      if (!hasFace) {
+        faceCount = 0;
+      }
+
+      console.log(
+        "Gemini result:",
+        {
+          classification,
+          hasFace,
+          faceCount,
+        }
+      );
+
+      return {
+        classification,
+        hasFace,
+        faceCount,
+      };
+    } catch (error) {
+      console.error(
+        "Gemini image classification error:",
+        error.message
+      );
+
+      /*
+      NEVER classify an API failure as event_photo.
+      */
+
+      return {
+        classification: "unknown",
+        hasFace: false,
+        faceCount: 0,
+      };
+    }
+  };
+
+/*
+============================================================
+PROCESS AND CLASSIFY RENDERED PAGE
+============================================================
+*/
+
+const processAndClassifyImage =
+  async ({
+    filePath,
+    pageNumber,
+    width,
+    height,
+    seenHashes,
+    extractedPhotos,
+    posterHolder,
+  }) => {
+    try {
+      if (
+        !filePath ||
+        !fs.existsSync(filePath)
+      ) {
+        return;
+      }
+
+      /*
+      --------------------------------------------------------
+      HASH IMAGE
+      --------------------------------------------------------
+      */
+
+      const imageBuffer =
+        fs.readFileSync(
+          filePath
+        );
+
+      const hash =
+        getBufferHash(
+          imageBuffer
+        );
+
+      /*
+      --------------------------------------------------------
+      DUPLICATE CHECK
+      --------------------------------------------------------
+      */
+
+      if (
+        seenHashes.has(hash)
+      ) {
+        console.log(
+          `Duplicate rendered page skipped: ${pageNumber}`
+        );
+
+        try {
+          fs.unlinkSync(
+            filePath
+          );
+        } catch {}
+
+        return;
+      }
+
+      seenHashes.add(hash);
+
+      console.log(
+        "--------------------------------------------------"
+      );
+
+      console.log(
+        `Classifying rendered PDF page ${pageNumber}`
+      );
+
+      console.log(
+        `Image: ${filePath}`
+      );
+
+      /*
+      --------------------------------------------------------
+      GEMINI
+      --------------------------------------------------------
+      */
+
+      const result =
+        await classifyImageWithGemini(
+          filePath
+        );
+
+      console.log(
+        `Classification: ${result.classification}`
+      );
+
+      console.log(
+        `Has face: ${result.hasFace}`
+      );
+
+      console.log(
+        `Face count: ${result.faceCount}`
+      );
+
+      /*
+      --------------------------------------------------------
+      GEMINI FAILURE
+      --------------------------------------------------------
+      */
+
+      if (
+        result.classification ===
+        "unknown"
+      ) {
+        console.log(
+          `Gemini could not classify page ${pageNumber}. Keeping file for debugging.`
+        );
+
+        return;
+      }
+
+      const filename =
+        path.basename(
+          filePath
+        );
+
+      const url =
+        `/uploads/events/${filename}`;
+
+      /*
+      --------------------------------------------------------
+      POSTER
+      --------------------------------------------------------
+      */
+
+      if (
+        result.classification ===
+        "poster"
+      ) {
+        if (
+          !posterHolder.url
+        ) {
+          posterHolder.url =
+            url;
+
+          posterHolder.filePath =
+            filePath;
+
+          posterHolder.width =
+            width || 0;
+
+          posterHolder.height =
+            height || 0;
+
+          console.log(
+            "POSTER FOUND:",
+            url
+          );
+        } else {
+          console.log(
+            "Additional poster detected. Ignoring it."
+          );
+        }
+
+        return;
+      }
+
+      /*
+      --------------------------------------------------------
+      EVENT PHOTO
+      --------------------------------------------------------
+      */
+
+      if (
+        result.classification ===
+        "event_photo"
+      ) {
+        extractedPhotos.push({
+          page:
+            pageNumber,
+
+          url,
+
+          width:
+            width || 0,
+
+          height:
+            height || 0,
+
+          hasFace:
+            result.hasFace,
+
+          faceCount:
+            result.faceCount,
+        });
+
+        console.log(
+          "EVENT PHOTO FOUND:",
+          url
+        );
+
+        return;
+      }
+
+      /*
+      --------------------------------------------------------
+      OTHER
+      --------------------------------------------------------
+      */
+
+      console.log(
+        `Page ${pageNumber} classified as OTHER. Ignoring.`
+      );
+
+    } catch (error) {
+      console.error(
+        `Could not process page ${pageNumber}:`,
+        error.message
+      );
+    }
+  };
+
+/*
+============================================================
+EXTRACT MEDIA FROM PDF
+
+NEW PIPELINE:
+
+PDF
+ ↓
+PDF page
+ ↓
+Render complete page
+ ↓
+Hash
+ ↓
+Gemini
+ ↓
+poster / event_photo / other
+ ↓
+Database
+
+We intentionally DO NOT extract PDF internal image
+XObjects anymore.
+============================================================
+*/
+
+const extractImagesFromPDF =
+  async (
+    pdfPath,
+    uploadsDir
+  ) => {
+    const pdfData =
+      new Uint8Array(
+        fs.readFileSync(
+          pdfPath
+        )
+      );
+
+    /*
+    --------------------------------------------------------
+    CANVAS FACTORY
+    --------------------------------------------------------
+    */
+
+    const canvasFactory =
+      new NodeCanvasFactory();
+
+    /*
+    --------------------------------------------------------
+    LOAD PDF
+    --------------------------------------------------------
+    */
+
+    const loadingTask =
+      pdfjsLib.getDocument({
+        data: pdfData,
+
+        /*
+        Explicitly tell PDF.js which canvas factory to use.
+        */
+
+        canvasFactory,
+      });
+
+    const pdf =
+      await loadingTask.promise;
+
+    console.log(
+      `PDF loaded successfully. Pages: ${pdf.numPages}`
+    );
+
+    const extractedPhotos =
+      [];
+
+    const posterHolder = {
+      url: "",
+      filePath: "",
+      width: 0,
+      height: 0,
     };
 
-    // 4. Send Email via Mail Transport
-    const info = await transporter.sendMail(mailOptions);
-    const previewUrl = isTest ? nodemailer.getTestMessageUrl(info) : null;
+    const seenHashes =
+      new Set();
 
-    console.log(`[Email Dispatch Success] Sent reminder for "${event.title}" to ${event.facultyEmail}. MessageID: ${info.messageId}`);
-    if (previewUrl) {
-      console.log(`[Ethereal Test Mail Preview] ${previewUrl}`);
+    /*
+    --------------------------------------------------------
+    PROCESS ONE PAGE
+    --------------------------------------------------------
+    */
+
+    const processPage =
+      async (pageNumber) => {
+        let page = null;
+
+        try {
+          console.log(
+            "=================================================="
+          );
+
+          console.log(
+            `Processing PDF page ${pageNumber}/${pdf.numPages}`
+          );
+
+          console.log(
+            "=================================================="
+          );
+
+          page =
+            await pdf.getPage(
+              pageNumber
+            );
+
+          /*
+          --------------------------------------------------
+          RENDER COMPLETE PAGE
+          --------------------------------------------------
+          */
+
+          const rendered =
+            await renderPdfPageAsPng(
+              page,
+              uploadsDir,
+              pageNumber
+            );
+
+          console.log(
+            `Rendered page ${pageNumber}: ${rendered.filePath}`
+          );
+
+          /*
+          --------------------------------------------------
+          CLASSIFY COMPLETE PAGE
+          --------------------------------------------------
+          */
+
+          await processAndClassifyImage({
+            filePath:
+              rendered.filePath,
+
+            pageNumber,
+
+            width:
+              rendered.width,
+
+            height:
+              rendered.height,
+
+            seenHashes,
+
+            extractedPhotos,
+
+            posterHolder,
+          });
+
+        } catch (error) {
+          console.error(
+            `Could not process PDF page ${pageNumber}:`,
+            error.message
+          );
+
+          console.error(
+            error.stack
+          );
+        } finally {
+          /*
+          PDF.js page cleanup.
+          */
+
+          if (page) {
+            try {
+              page.cleanup();
+            } catch {}
+          }
+        }
+      };
+
+    /*
+    --------------------------------------------------------
+    PROCESS ALL PAGES SEQUENTIALLY
+    --------------------------------------------------------
+
+    Sequential processing is intentional.
+
+    Gemini requests are already expensive and sequential
+    processing prevents multiple pages from competing for
+    resources at the same time.
+    --------------------------------------------------------
+    */
+
+    for (
+      let pageNumber = 1;
+      pageNumber <= pdf.numPages;
+      pageNumber++
+    ) {
+      await processPage(
+        pageNumber
+      );
     }
 
-    event.reminderSent = true;
-    event.lastReminderDate = new Date();
-    await event.save();
+    /*
+    --------------------------------------------------------
+    CLEANUP PDF
+    --------------------------------------------------------
+    */
 
-    res.status(200).json({ 
-      message: isTest 
-        ? `Reminder email simulated via Ethereal Test Service! (Preview: ${previewUrl})`
-        : "Reminder email sent successfully to Gmail inbox!", 
-      event,
-      previewUrl
-    });
+    try {
+      await pdf.cleanup();
+    } catch {}
 
-  } catch (error) {
-    console.error("[Email Dispatch Error]", {
-      code: error.code,
-      command: error.command,
-      message: error.message,
-      stack: error.stack
-    });
+    try {
+      await pdf.destroy();
+    } catch {}
 
-    if (error.code === 'EAUTH' || error.message.includes('Invalid login') || error.message.includes('Username and Password not accepted')) {
-      return res.status(401).json({
-        message: "SMTP Authentication Failed: Invalid credentials or missing Gmail App Password in EMAIL_PASS.",
-        details: error.message
-      });
-    }
+    console.log(
+      "=================================================="
+    );
 
-    if (['ESOCKET', 'ETIMEDOUT', 'ECONNREFUSED', 'EDNS'].includes(error.code) || error.message.includes('connect ETIMEDOUT')) {
-      return res.status(502).json({
-        message: "SMTP Host Connection Failed: Unable to reach mail server. Check firewall settings for port 587/465.",
-        details: error.message
-      });
-    }
+    console.log(
+      "PDF EXTRACTION COMPLETE"
+    );
 
-    if (error.responseCode === 429 || error.message.includes('Quota exceeded') || error.message.includes('rate limit')) {
-      return res.status(429).json({
-        message: "Email Service Rate Limit Exceeded: Daily quota reached or provider rate limiting active.",
-        details: error.message
-      });
-    }
+    console.log(
+      `Event photos found: ${extractedPhotos.length}`
+    );
 
-    if (error.code === 'EENVELOPE' || error.responseCode === 550) {
-      return res.status(422).json({
-        message: "Email Address Rejected by Mail Server: Recipient inbox does not exist or mailbox full.",
-        details: error.message
-      });
-    }
+    console.log(
+      `Poster found: ${Boolean(posterHolder.url)}`
+    );
 
-    res.status(400).json({ 
-      message: `Failed to send email: ${error.message}`,
-      error: error.message,
-      code: error.code || "EMAIL_SEND_ERROR"
-    });
-  }
-};
+    console.log(
+      "=================================================="
+    );
 
-export const getDashboardStats = async (req, res) => {
-  try {
-    const events = await Event.find();
-    
-    const pending = events.filter(e => e.autoReminder && !e.reminderSent);
-    const sent = events.filter(e => e.reminderSent);
-    const upcoming = events.filter(e => {
-      const isJune = new Date(e.date).getMonth() === 5; // Month is 0-indexed, June is 5
-      const isJuly = new Date(e.date).getMonth() === 6;
-      return (isJune || isJuly) && !e.reminderSent;
-    });
+    return {
+      renderedPhotos:
+        extractedPhotos,
 
-    res.status(200).json({
-      pending,
-      sent,
-      upcoming
-    });
-  } catch (error) {
-    console.error("getDashboardStats Error:", error);
-    res.status(500).json({ message: "Failed to fetch stats", error: error.message });
-  }
-};
+      poster:
+        posterHolder.url,
+    };
+  };
 
-export const deleteEvent = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deletedEvent = await Event.findByIdAndDelete(id);
-    if (!deletedEvent) {
-      return res.status(404).json({ message: "Event not found" });
-    }
-    res.status(200).json({ message: "Event deleted successfully", id });
-  } catch (error) {
-    console.error("deleteEvent Error:", error);
-    res.status(500).json({ message: "Failed to delete event", error: error.message });
-  }
-};
+/*
+============================================================
+GET ALL EVENTS
+============================================================
+*/
 
-const parseDDMMYYYYDate = (raw) => {
-  if (!raw) return null;
-  const str = String(raw).trim();
-  if (!str) return null;
+export const getEvents =
+  async (req, res) => {
+    try {
+      const events =
+        await Event.find({})
+          .sort({
+            date: -1,
+          })
+          .lean();
 
-  // Explicit DD-MM-YYYY parsing (Day = parts[0], Month = parts[1], Year = parts[2])
-  const parts = str.split(/[-/.]/);
-  if (parts.length >= 3) {
-    const p1 = parseInt(parts[0], 10);
-    const p2 = parseInt(parts[1], 10);
-    const p3 = parseInt(parts[2], 10);
+      res
+        .status(200)
+        .json(events);
 
-    // If p3 is 4-digit year e.g. "15-10-2025" -> Day=p1, Month=p2, Year=p3
-    if (!isNaN(p1) && !isNaN(p2) && !isNaN(p3) && p3 > 1000) {
-      return new Date(Date.UTC(p3, p2 - 1, p1));
-    }
+    } catch (error) {
+      console.error(
+        "getEvents Error:",
+        error
+      );
 
-    // If p1 is 4-digit year e.g. "2025-10-15" -> Year=p1, Month=p2, Day=p3
-    if (!isNaN(p1) && !isNaN(p2) && !isNaN(p3) && p1 > 1000) {
-      return new Date(Date.UTC(p1, p2 - 1, p3));
-    }
-  }
+      res
+        .status(500)
+        .json({
+          message:
+            "Failed to fetch events",
 
-  const d = new Date(str);
-  return !isNaN(d.getTime()) ? d : null;
-};
-
-export const celebrationBulkUpload = async (req, res) => {
-  try {
-    const rows = req.body;
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return res.status(400).json({ message: "Invalid celebration event data provided" });
-    }
-
-    let importedCount = 0;
-    const invalidRows = [];
-
-    for (let i = 0; i < rows.length; i++) {
-      const rawRow = rows[i];
-      if (!rawRow || typeof rawRow !== "object") continue;
-
-      // Normalize row keys to lower case
-      const row = {};
-      Object.keys(rawRow).forEach((key) => {
-        row[key.trim().toLowerCase()] = rawRow[key];
-      });
-
-      const title = (
-        row["activity title"] ||
-        row["activity_title"] ||
-        row["title"] ||
-        row["activity"] ||
-        row["event title"] ||
-        row["event_title"] ||
-        row["event"] ||
-        row["name"] ||
-        row["celebration"] ||
-        ""
-      ).trim();
-
-      const rawDate =
-        row["date"] ||
-        row["event date"] ||
-        row["event_date"] ||
-        row["activity date"] ||
-        row["start date"] ||
-        row["date (yyyy-mm-dd)"] ||
-        row["date(yyyy-mm-dd)"];
-
-      if (!title || !rawDate) {
-        invalidRows.push({ rowIndex: i + 1, row: rawRow, reason: "Missing required Title or Date" });
-        continue;
-      }
-
-      const parsedDate = parseDDMMYYYYDate(rawDate);
-      if (!parsedDate || isNaN(parsedDate.getTime())) {
-        invalidRows.push({ rowIndex: i + 1, row: rawRow, reason: `Unparseable Date: "${rawDate}"` });
-        continue;
-      }
-
-      const statusVal = (row["status"] || row["state"] || "Active").trim();
-      const levelVal = (row["level"] || row["tier"] || row["category"] || "").trim();
-
-      const startOfDay = new Date(parsedDate);
-      startOfDay.setUTCHours(0, 0, 0, 0);
-      const endOfDay = new Date(parsedDate);
-      endOfDay.setUTCHours(23, 59, 59, 999);
-
-      const existing = await Event.findOne({
-        title: { $regex: new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
-        date: { $gte: startOfDay, $lte: endOfDay },
-      });
-
-      if (existing) {
-        existing.status = statusVal;
-        existing.level = levelVal;
-        existing.category = "Celebration Event";
-        existing.isCelebration = true;
-        await existing.save();
-        importedCount++;
-      } else {
-        await Event.create({
-          title,
-          date: parsedDate,
-          status: statusVal,
-          level: levelVal,
-          category: "Celebration Event",
-          isCelebration: true,
-          department: "General",
-          venue: "Main Campus",
-          facultyName: "Event Coordinator",
+          error:
+            error.message,
         });
-        importedCount++;
-      }
     }
+  };
 
-    res.status(201).json({
-      message: `${importedCount} Celebration Events imported successfully.`,
-      imported: importedCount,
-      invalidCount: invalidRows.length,
-      invalidRows,
-    });
-  } catch (error) {
-    console.error("celebrationBulkUpload Error:", error);
-    res.status(500).json({ message: "Failed to upload celebration events", error: error.message });
-  }
-};
+/*
+============================================================
+GET SINGLE EVENT
+============================================================
+*/
+
+export const getEventById =
+  async (req, res) => {
+    try {
+      const {
+        id,
+      } = req.params;
+
+      const event =
+        await Event.findById(
+          id
+        );
+
+      if (!event) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Event not found",
+          });
+      }
+
+      res
+        .status(200)
+        .json(event);
+
+    } catch (error) {
+      console.error(
+        "getEventById Error:",
+        error
+      );
+
+      res
+        .status(500)
+        .json({
+          message:
+            "Failed to fetch event",
+
+          error:
+            error.message,
+        });
+    }
+  };
+
+/*
+============================================================
+CREATE EVENT
+============================================================
+*/
+
+export const createEvent =
+  async (req, res) => {
+    try {
+      const {
+        title,
+        department,
+        date,
+        time,
+        venue,
+        facultyName,
+        facultyEmail,
+        activityType,
+        category,
+        level,
+        isCelebration,
+        message,
+        status,
+        reportLink,
+        posterLink,
+        videoLink,
+        photos,
+        collegePhoto,
+        eventPhoto,
+        source,
+      } = req.body;
+
+      if (
+        !title ||
+        !date
+      ) {
+        return res
+          .status(400)
+          .json({
+            message:
+              "Title and date are required.",
+          });
+      }
+
+      const event =
+        new Event({
+          title:
+            title.trim(),
+
+          department:
+            department ||
+            "N/A",
+
+          date:
+            new Date(date),
+
+          time:
+            time ||
+            "10:00 AM",
+
+          venue:
+            venue ||
+            "TBD",
+
+          facultyName:
+            facultyName ||
+            "Unknown",
+
+          facultyEmail:
+            facultyEmail ||
+            "",
+
+          activityType:
+            activityType ||
+            "IIC",
+
+          category:
+            category ||
+            "Workshop",
+
+          level:
+            level ||
+            "",
+
+          isCelebration:
+            Boolean(
+              isCelebration
+            ),
+
+          message:
+            message || "",
+
+          status:
+            status ||
+            "UPCOMING",
+
+          reportLink:
+            reportLink || "",
+
+          posterLink:
+            posterLink || "",
+
+          videoLink:
+            videoLink || "",
+
+          photos:
+            Array.isArray(
+              photos
+            )
+              ? photos
+              : [],
+
+          collegePhoto:
+            collegePhoto ||
+            "",
+
+          eventPhoto:
+            eventPhoto ||
+            "",
+
+          source:
+            source ||
+            "CALENDAR",
+        });
+
+      await event.save();
+
+      res
+        .status(201)
+        .json({
+          message:
+            "Event created successfully!",
+
+          event,
+        });
+
+    } catch (error) {
+      console.error(
+        "createEvent Error:",
+        error
+      );
+
+      res
+        .status(500)
+        .json({
+          message:
+            "Failed to create event",
+
+          error:
+            error.message,
+        });
+    }
+  };
+
+/*
+============================================================
+UPDATE EVENT
+============================================================
+*/
+
+export const updateEvent =
+  async (req, res) => {
+    try {
+      const {
+        id,
+      } = req.params;
+
+      const allowedFields = [
+        "title",
+        "department",
+        "date",
+        "time",
+        "venue",
+        "facultyName",
+        "facultyEmail",
+        "activityType",
+        "category",
+        "level",
+        "isCelebration",
+        "message",
+        "status",
+        "reportLink",
+        "posterLink",
+        "videoLink",
+        "photos",
+        "collegePhoto",
+        "eventPhoto",
+        "source",
+      ];
+
+      const updateData = {};
+
+      allowedFields.forEach(
+        (field) => {
+          if (
+            req.body[field] !==
+            undefined
+          ) {
+            updateData[field] =
+              req.body[field];
+          }
+        }
+      );
+
+      const event =
+        await Event.findByIdAndUpdate(
+          id,
+          updateData,
+          {
+            new: true,
+            runValidators: true,
+          }
+        );
+
+      if (!event) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Event not found",
+          });
+      }
+
+      res
+        .status(200)
+        .json({
+          message:
+            "Event updated successfully!",
+
+          event,
+        });
+
+    } catch (error) {
+      console.error(
+        "updateEvent Error:",
+        error
+      );
+
+      res
+        .status(500)
+        .json({
+          message:
+            "Failed to update event",
+
+          error:
+            error.message,
+        });
+    }
+  };
+
+/*
+============================================================
+UPDATE EVENT MEDIA
+============================================================
+
+Accepts:
+
+report
+videoLink
+posterLink
+
+The PDF is processed automatically.
+
+The backend extracts:
+
+poster
+event photos
+face information
+============================================================
+*/
+
+export const updateEventMedia =
+  async (req, res) => {
+    try {
+      const {
+        id,
+      } = req.params;
+
+      /*
+      --------------------------------------------------------
+      FIND EVENT
+      --------------------------------------------------------
+      */
+
+      const event =
+        await Event.findById(
+          id
+        );
+
+      if (!event) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Event not found",
+          });
+      }
+
+      /*
+      --------------------------------------------------------
+      UPLOAD DIRECTORY
+      --------------------------------------------------------
+      */
+
+      const uploadsDir =
+        getUploadsDirectory();
+
+      /*
+      --------------------------------------------------------
+      VIDEO LINK
+      --------------------------------------------------------
+      */
+
+      if (
+        req.body.videoLink !==
+        undefined
+      ) {
+        event.videoLink =
+          String(
+            req.body.videoLink
+          ).trim();
+      }
+
+      /*
+      --------------------------------------------------------
+      MANUAL POSTER LINK
+      --------------------------------------------------------
+      */
+
+      if (
+        req.body.posterLink !==
+        undefined
+      ) {
+        event.posterLink =
+          String(
+            req.body.posterLink
+          ).trim();
+      }
+
+      /*
+      --------------------------------------------------------
+      REPORT FILE
+      --------------------------------------------------------
+      */
+
+      const reportFile =
+        req.files?.report;
+
+      if (reportFile) {
+        const extension =
+          path
+            .extname(
+              reportFile.name
+            )
+            .toLowerCase();
+
+        /*
+        ------------------------------------------------------
+        ONLY PDF
+        ------------------------------------------------------
+        */
+
+        if (
+          extension !==
+          ".pdf"
+        ) {
+          return res
+            .status(400)
+            .json({
+              message:
+                "Please upload the event report as a PDF.",
+            });
+        }
+
+        /*
+        ------------------------------------------------------
+        CREATE REPORT FILENAME
+        ------------------------------------------------------
+        */
+
+        const filename =
+          createFilename(
+            `report_${event._id}`,
+            ".pdf"
+          );
+
+        const filePath =
+          path.join(
+            uploadsDir,
+            filename
+          );
+
+        /*
+        ------------------------------------------------------
+        SAVE REPORT
+        ------------------------------------------------------
+        */
+
+        await reportFile.mv(
+  filePath
+);
+
+/*
+--------------------------------------------------------
+EXTRACT VIDEO + SOCIAL MEDIA LINKS
+--------------------------------------------------------
+*/
+
+console.log(
+  "Starting PDF link extraction..."
+);
+
+const extractedLinks =
+  await extractLinksFromPDF(
+    filePath
+  );
+
+event.videoLinks =
+  extractedLinks.videoLinks;
+
+event.socialMediaLinks =
+  extractedLinks.socialMediaLinks;
+
+const baseUrl =
+  getServerBaseUrl(
+    req
+  );
+
+        event.reportLink =
+          `${baseUrl}/uploads/events/${filename}`;
+
+        console.log(
+          "========================================"
+        );
+
+        console.log(
+          "EVENT REPORT SAVED"
+        );
+
+        console.log(
+          event.reportLink
+        );
+
+        console.log(
+          "========================================"
+        );
+
+        /*
+        ------------------------------------------------------
+        EXTRACT MEDIA
+        ------------------------------------------------------
+        */
+
+        console.log(
+          "Starting PDF image extraction..."
+        );
+
+        const extracted =
+          await extractImagesFromPDF(
+            filePath,
+            uploadsDir
+          );
+
+        /*
+        ------------------------------------------------------
+        SAVE POSTER
+        ------------------------------------------------------
+        */
+
+        if (
+          extracted.poster
+        ) {
+          event.posterLink =
+            `${baseUrl}${extracted.poster}`;
+
+          console.log(
+            "========================================"
+          );
+
+          console.log(
+            "POSTER EXTRACTED"
+          );
+
+          console.log(
+            event.posterLink
+          );
+
+          console.log(
+            "========================================"
+          );
+
+        } else {
+          console.log(
+            "No poster was detected."
+          );
+        }
+
+        /*
+        ------------------------------------------------------
+        SAVE EVENT PHOTOS
+        ------------------------------------------------------
+        */
+
+        const extractedPhotoUrls =
+          extracted.renderedPhotos.map(
+            (item) =>
+              `${baseUrl}${item.url}`
+          );
+
+        if (
+          extractedPhotoUrls.length >
+          0
+        ) {
+          event.photos =
+            extractedPhotoUrls;
+
+          console.log(
+            `Saved ${extractedPhotoUrls.length} event photos.`
+          );
+
+          /*
+          ----------------------------------------------------
+          FACE INFORMATION
+          ----------------------------------------------------
+          */
+
+          const totalFaces =
+            extracted.renderedPhotos.reduce(
+              (
+                total,
+                photo
+              ) =>
+                total +
+                (
+                  photo.faceCount ||
+                  0
+                ),
+              0
+            );
+
+          console.log(
+            `Total detected faces across event photos: ${totalFaces}`
+          );
+
+        } else {
+          console.log(
+            "No event photographs detected."
+          );
+
+          event.photos =
+            [];
+        }
+
+        /*
+        ------------------------------------------------------
+        MARK SOURCE
+        ------------------------------------------------------
+        */
+
+        event.source =
+          "REPORT";
+      }
+
+      /*
+      --------------------------------------------------------
+      SAVE EVENT
+      --------------------------------------------------------
+      */
+
+      await event.save();
+
+      /*
+      --------------------------------------------------------
+      RETURN
+      --------------------------------------------------------
+      */
+
+      res
+        .status(200)
+        .json({
+          message:
+            "Event report uploaded and media extracted successfully!",
+
+          event,
+        });
+
+    } catch (error) {
+      console.error(
+        "updateEventMedia Error:",
+        error
+      );
+
+      res
+        .status(500)
+        .json({
+          message:
+            "Failed to upload report and extract media",
+
+          error:
+            error.message,
+        });
+    }
+  };
+
+/*
+============================================================
+DELETE EVENT
+============================================================
+*/
+
+export const deleteEvent =
+  async (req, res) => {
+    try {
+      const {
+        id,
+      } = req.params;
+
+      const event =
+        await Event.findByIdAndDelete(
+          id
+        );
+
+      if (!event) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Event not found",
+          });
+      }
+
+      res
+        .status(200)
+        .json({
+          message:
+            "Event deleted successfully!",
+        });
+
+    } catch (error) {
+      console.error(
+        "deleteEvent Error:",
+        error
+      );
+
+      res
+        .status(500)
+        .json({
+          message:
+            "Failed to delete event",
+
+          error:
+            error.message,
+        });
+    }
+  };
+

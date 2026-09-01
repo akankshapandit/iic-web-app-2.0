@@ -22,6 +22,7 @@ const generateToken = (user) => {
 };
 
 // 1. Get Public List of Faculty Members for Selection/Login
+// 1. Get Faculty Members + Their Event Information
 export const getFacultyMembers = async (req, res) => {
   try {
     let users = await User.find({
@@ -29,18 +30,32 @@ export const getFacultyMembers = async (req, res) => {
     })
       .select("-password")
       .sort({ facultyName: 1, name: 1 });
-    
     // Fallback 1: Extract unique faculty from Events collection
     if (users.length === 0) {
       const distinctFaculty = await Event.distinct("facultyName");
       if (distinctFaculty && distinctFaculty.length > 0) {
-        users = distinctFaculty.filter(Boolean).map(name => ({
-          _id: name,
-          name,
-          facultyName: name,
-          department: "N/A"
-        }));
-        return res.status(200).json(users);
+        const list = await Promise.all(
+          distinctFaculty.filter(Boolean).map(async (name) => {
+            const normalizedName = normalizeFacultyName(name);
+            const events = await Event.find({
+              $or: [
+                { facultyName: normalizedName },
+                { facultyName: new RegExp(`^${normalizedName}$`, "i") }
+              ]
+            });
+            return {
+              _id: name,
+              name,
+              facultyName: name,
+              department: events[0]?.department || "N/A",
+              activityCount: events.length,
+              totalEvents: events.length,
+              completedEvents: events.filter((e) => String(e.status).toUpperCase() === "COMPLETED").length,
+              upcomingEvents: events.filter((e) => String(e.status).toUpperCase() !== "COMPLETED").length
+            };
+          })
+        );
+        return res.status(200).json(list);
       }
     }
 
@@ -51,7 +66,7 @@ export const getFacultyMembers = async (req, res) => {
         const fileContent = fs.readFileSync(csvPath, "utf-8");
         const records = parseCSVContent(fileContent);
         const map = new Map();
-        records.forEach(r => {
+        records.forEach((r) => {
           const raw = r["Name of the faculty"] || r["faculty"] || "";
           const fName = normalizeFacultyName(raw);
           const dept = (r["department"] || "N/A").trim();
@@ -63,16 +78,75 @@ export const getFacultyMembers = async (req, res) => {
           _id: fName,
           name: fName,
           facultyName: fName,
-          department: dept
+          department: dept,
+          activityCount: 0,
+          totalEvents: 0,
+          completedEvents: 0,
+          upcomingEvents: 0
         }));
         return res.status(200).json(csvList);
       }
     }
 
-    res.status(200).json(users);
+    // Add event information to every faculty member
+    const membersWithEvents = await Promise.all(
+      users.map(async (user) => {
+        const facultyName =
+          user.facultyName || user.name;
+
+        const normalizedName =
+          normalizeFacultyName(facultyName);
+
+        const events = await Event.find({
+          $or: [
+            { facultyName: normalizedName },
+            {
+              facultyName: new RegExp(
+                `^${normalizedName}$`,
+                "i"
+              )
+            }
+          ]
+        });
+
+        const completedEvents = events.filter(
+          (event) =>
+            String(event.status).toUpperCase() ===
+            "COMPLETED"
+        ).length;
+
+        const upcomingEvents =
+          events.length - completedEvents;
+
+        return {
+          _id: user._id,
+          name: user.name,
+          facultyName: user.facultyName || user.name,
+          email: user.email || "",
+          department: user.department || "N/A",
+          role: user.role,
+
+          // Event information
+          activityCount: events.length,
+          totalEvents: events.length,
+          completedEvents,
+          upcomingEvents
+        };
+      })
+    );
+
+    res.status(200).json(membersWithEvents);
+
   } catch (error) {
-    console.error("getFacultyMembers Error:", error);
-    res.status(500).json({ message: "Failed to fetch faculty list", error: error.message });
+    console.error(
+      "getFacultyMembers Error:",
+      error
+    );
+
+    res.status(500).json({
+      message: "Failed to fetch faculty list",
+      error: error.message
+    });
   }
 };
 
