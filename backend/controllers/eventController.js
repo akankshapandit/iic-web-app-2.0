@@ -77,6 +77,279 @@ const getServerBaseUrl = (req) => {
 
 /*
 ============================================================
+HELPER - EXTRACT VIDEO AND SOCIAL MEDIA LINKS FROM PDF
+============================================================
+*/
+
+const extractLinksFromPDF = async (pdfPath) => {
+  const result = {
+    videoLinks: [],
+    socialMediaLinks: [],
+  };
+
+  try {
+    const pdfData = new Uint8Array(
+      fs.readFileSync(pdfPath)
+    );
+
+    const pdf = await pdfjsLib
+      .getDocument({
+        data: pdfData,
+      })
+      .promise;
+
+    const allLinks = new Set();
+
+    /*
+    --------------------------------------------------------
+    PROCESS EVERY PDF PAGE
+    --------------------------------------------------------
+    */
+
+    for (
+      let pageNumber = 1;
+      pageNumber <= pdf.numPages;
+      pageNumber++
+    ) {
+      try {
+        const page = await pdf.getPage(
+          pageNumber
+        );
+
+        /*
+        ------------------------------------------------------
+        1. EXTRACT LINKS FROM PDF ANNOTATIONS
+        ------------------------------------------------------
+        */
+
+        const annotations =
+          await page.getAnnotations();
+
+        for (const annotation of annotations) {
+          if (
+            annotation.subtype === "Link" &&
+            annotation.url
+          ) {
+            allLinks.add(
+              annotation.url.trim()
+            );
+          }
+
+          /*
+          Some PDFs store the URL inside a
+          URI action.
+          */
+
+          if (
+            annotation.action === "URI" &&
+            annotation.url
+          ) {
+            allLinks.add(
+              annotation.url.trim()
+            );
+          }
+        }
+
+        /*
+        ------------------------------------------------------
+        2. EXTRACT PLAIN TEXT URLS
+        ------------------------------------------------------
+        */
+
+        const textContent =
+          await page.getTextContent();
+
+        const pageText =
+          textContent.items
+            .map(
+              (item) =>
+                item.str || ""
+            )
+            .join(" ");
+
+        /*
+        Match URLs beginning with:
+        http://
+        https://
+        www.
+        */
+
+        const urlRegex =
+          /(?:https?:\/\/|www\.)[^\s<>"')]+/gi;
+
+        const textUrls =
+          pageText.match(
+            urlRegex
+          ) || [];
+
+        for (let url of textUrls) {
+          url = url
+            .trim()
+            .replace(
+              /[.,;:!?]+$/,
+              ""
+            );
+
+          if (url.startsWith("www.")) {
+            url = `https://${url}`;
+          }
+
+          allLinks.add(url);
+        }
+      } catch (pageError) {
+        console.error(
+          `Could not extract links from PDF page ${pageNumber}:`,
+          pageError.message
+        );
+      }
+    }
+
+    /*
+    --------------------------------------------------------
+    CLASSIFY LINKS
+    --------------------------------------------------------
+    */
+
+    for (const rawUrl of allLinks) {
+      try {
+        const url = new URL(rawUrl);
+
+        const hostname =
+          url.hostname
+            .toLowerCase()
+            .replace(/^www\./, "");
+
+        /*
+        ------------------------------------------------------
+        VIDEO PLATFORMS
+        ------------------------------------------------------
+        */
+
+        const isVideo =
+          hostname === "youtube.com" ||
+          hostname === "youtu.be" ||
+          hostname === "youtube-nocookie.com" ||
+          hostname === "vimeo.com" ||
+          hostname === "dailymotion.com" ||
+          hostname === "drive.google.com";
+
+        if (isVideo) {
+          result.videoLinks.push(
+            url.href
+          );
+
+          continue;
+        }
+
+        /*
+        ------------------------------------------------------
+        SOCIAL MEDIA
+        ------------------------------------------------------
+        */
+
+        let platform = null;
+
+        if (
+          hostname === "instagram.com"
+        ) {
+          platform = "Instagram";
+        } else if (
+          hostname === "facebook.com" ||
+          hostname === "fb.com"
+        ) {
+          platform = "Facebook";
+        } else if (
+          hostname === "linkedin.com"
+        ) {
+          platform = "LinkedIn";
+        } else if (
+          hostname === "twitter.com" ||
+          hostname === "x.com"
+        ) {
+          platform = "X";
+        } else if (
+          hostname === "tiktok.com"
+        ) {
+          platform = "TikTok";
+        }
+
+        if (platform) {
+          result.socialMediaLinks.push({
+            platform,
+            url: url.href,
+          });
+        }
+      } catch (urlError) {
+        console.log(
+          "Invalid URL skipped:",
+          rawUrl
+        );
+      }
+    }
+
+    /*
+    --------------------------------------------------------
+    REMOVE DUPLICATES
+    --------------------------------------------------------
+    */
+
+    result.videoLinks = [
+      ...new Set(
+        result.videoLinks
+      ),
+    ];
+
+    const socialMap =
+      new Map();
+
+    for (
+      const social of
+        result.socialMediaLinks
+    ) {
+      socialMap.set(
+        social.url,
+        social
+      );
+    }
+
+    result.socialMediaLinks =
+      [...socialMap.values()];
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "PDF LINK EXTRACTION COMPLETE"
+    );
+
+    console.log(
+      "Video links:",
+      result.videoLinks
+    );
+
+    console.log(
+      "Social media links:",
+      result.socialMediaLinks
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    return result;
+  } catch (error) {
+    console.error(
+      "PDF link extraction failed:",
+      error.message
+    );
+
+    return result;
+  }
+};
+
+/*
+============================================================
 PDF.JS NODE CANVAS FACTORY
 
 PDF.js needs a canvas factory when rendering PDFs in Node.
@@ -1638,13 +1911,34 @@ export const updateEventMedia =
         */
 
         await reportFile.mv(
-          filePath
-        );
+  filePath
+);
 
-        const baseUrl =
-          getServerBaseUrl(
-            req
-          );
+/*
+--------------------------------------------------------
+EXTRACT VIDEO + SOCIAL MEDIA LINKS
+--------------------------------------------------------
+*/
+
+console.log(
+  "Starting PDF link extraction..."
+);
+
+const extractedLinks =
+  await extractLinksFromPDF(
+    filePath
+  );
+
+event.videoLinks =
+  extractedLinks.videoLinks;
+
+event.socialMediaLinks =
+  extractedLinks.socialMediaLinks;
+
+const baseUrl =
+  getServerBaseUrl(
+    req
+  );
 
         event.reportLink =
           `${baseUrl}/uploads/events/${filename}`;

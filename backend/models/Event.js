@@ -131,6 +131,63 @@ const eventSchema = new mongoose.Schema(
     ],
 
     // ============================================================
+// EXTRACTED VIDEO LINKS
+// ============================================================
+
+videoLinks: [
+  {
+    type: String,
+    trim: true,
+  },
+],
+
+// ============================================================
+// EXTRACTED SOCIAL MEDIA LINKS
+// ============================================================
+
+socialMediaLinks: [
+  {
+    platform: {
+      type: String,
+      trim: true,
+    },
+
+    url: {
+      type: String,
+      trim: true,
+    },
+  },
+],
+
+// ============================================================
+// EVENT PHOTOS
+// ============================================================
+
+photos: [
+  {
+    url: {
+      type: String,
+      required: true,
+    },
+
+    page: {
+      type: Number,
+      default: 0,
+    },
+
+    hasFace: {
+      type: Boolean,
+      default: false,
+    },
+
+    faceCount: {
+      type: Number,
+      default: 0,
+    },
+  },
+],
+
+    // ============================================================
     // OLD PHOTO FIELDS
     // ============================================================
 
