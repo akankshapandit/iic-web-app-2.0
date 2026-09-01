@@ -80,6 +80,139 @@ function MemberDashboard() {
 
   const facultyDisplayName = profile?.name || memberUser?.facultyName || memberUser?.name || "Faculty Member";
 
+  // Dynamic Quarter Calculation based on event date:
+  // Q1: 1 September to 30 November (Months 8, 9, 10)
+  // Q2: 1 December to 28/29 February (Months 11, 0, 1)
+  // Q3: 1 March to 31 May (Months 2, 3, 4)
+  // Q4: 1 June to 31 August (Months 5, 6, 7)
+  const getQuarterForDate = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    const month = d.getMonth(); // 0-indexed: 0 = Jan, 11 = Dec
+    if (month >= 8 && month <= 10) return "Q1";
+    if (month === 11 || month === 0 || month === 1) return "Q2";
+    if (month >= 2 && month <= 4) return "Q3";
+    if (month >= 5 && month <= 7) return "Q4";
+    return null;
+  };
+
+  const quarterDefinitions = [
+    {
+      id: "Q1",
+      title: "Quarter 1 (1st September – 30th November)",
+    },
+    {
+      id: "Q2",
+      title: "Quarter 2 (1st December – 28th/29th February)",
+    },
+    {
+      id: "Q3",
+      title: "Quarter 3 (1st March – 31st May)",
+    },
+    {
+      id: "Q4",
+      title: "Quarter 4 (1st June – 31st August)",
+    },
+  ];
+
+  const quarterGroupedEvents = quarterDefinitions
+    .map((q) => ({
+      ...q,
+      events: filteredEvents.filter((evt) => getQuarterForDate(evt.date) === q.id),
+    }))
+    .filter((q) => q.events.length > 0);
+
+  const otherEvents = filteredEvents.filter((evt) => !getQuarterForDate(evt.date));
+
+  // Helper to render existing event card
+  const renderEventCard = (evt) => {
+    const formattedDate = new Date(evt.date).toLocaleDateString("en-US", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
+
+    const actType = evt.activityType || evt.category || "IIC";
+
+    return (
+      <div
+        key={evt._id}
+        className="bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition flex flex-col md:flex-row md:items-center justify-between gap-4"
+      >
+        <div className="space-y-2 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-100 text-blue-800 uppercase">
+              {actType}
+            </span>
+            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold ${
+              String(evt.status).toUpperCase() === "COMPLETED"
+                ? "bg-green-100 text-green-800"
+                : "bg-amber-100 text-amber-800"
+            }`}>
+              {evt.status || "COMPLETED"}
+            </span>
+            {evt.source === "SELF_DRIVEN" && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
+                Self Driven
+              </span>
+            )}
+          </div>
+
+          <h3 className="text-base font-extrabold text-gray-800 leading-snug">
+            {evt.title}
+          </h3>
+
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-500 font-medium">
+            <span>🏢 Department: <strong className="text-gray-800">{evt.department}</strong></span>
+            <span>📅 Date: <strong className="text-gray-800">{formattedDate}</strong></span>
+            <span>📍 Venue: <strong className="text-gray-800">{evt.venue || "CMRIT Campus"}</strong></span>
+          </div>
+
+          {/* Documentation Link Status Badges */}
+          <div className="flex items-center gap-3 pt-1">
+            {evt.reportLink ? (
+              <a
+                href={evt.reportLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline"
+              >
+                <span>🔗</span> View Report ↗
+              </a>
+            ) : (
+              <span className="text-[11px] text-gray-400">No Report Link</span>
+            )}
+
+            <span className="text-gray-300">•</span>
+
+            {evt.eventPhoto || evt.collegePhoto ? (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-green-600">
+                <span>📷</span> Photo Uploaded
+              </span>
+            ) : (
+              <span className="text-[11px] text-gray-400">No Photo</span>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => {
+              setSelectedEvent(evt);
+              setIsDetailModalOpen(true);
+            }}
+            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs transition shadow"
+          >
+            View Details
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 space-y-6">
       
@@ -234,93 +367,36 @@ function MemberDashboard() {
             <p className="text-xs text-gray-500 mt-1">Try changing your search term or select "All Events".</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {filteredEvents.map((evt) => {
-              const formattedDate = new Date(evt.date).toLocaleDateString("en-US", {
-                weekday: "short",
-                year: "numeric",
-                month: "short",
-                day: "numeric"
-              });
-
-              const actType = evt.activityType || evt.category || "IIC";
-
-              return (
-                <div
-                  key={evt._id}
-                  className="bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div className="space-y-2 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-100 text-blue-800 uppercase">
-                        {actType}
-                      </span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold ${
-                        String(evt.status).toUpperCase() === "COMPLETED"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-amber-100 text-amber-800"
-                      }`}>
-                        {evt.status || "COMPLETED"}
-                      </span>
-                      {evt.source === "SELF_DRIVEN" && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
-                          Self Driven
-                        </span>
-                      )}
-                    </div>
-
-                    <h3 className="text-base font-extrabold text-gray-800 leading-snug">
-                      {evt.title}
-                    </h3>
-
-                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-500 font-medium">
-                      <span>🏢 Department: <strong className="text-gray-800">{evt.department}</strong></span>
-                      <span>📅 Date: <strong className="text-gray-800">{formattedDate}</strong></span>
-                      <span>📍 Venue: <strong className="text-gray-800">{evt.venue || "CMRIT Campus"}</strong></span>
-                    </div>
-
-                    {/* Documentation Link Status Badges */}
-                    <div className="flex items-center gap-3 pt-1">
-                      {evt.reportLink ? (
-                        <a
-                          href={evt.reportLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline"
-                        >
-                          <span>🔗</span> View Report ↗
-                        </a>
-                      ) : (
-                        <span className="text-[11px] text-gray-400">No Report Link</span>
-                      )}
-
-                      <span className="text-gray-300">•</span>
-
-                      {evt.eventPhoto || evt.collegePhoto ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-green-600">
-                          <span>📷</span> Photo Uploaded
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-gray-400">No Photo</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    <button
-                      onClick={() => {
-                        setSelectedEvent(evt);
-                        setIsDetailModalOpen(true);
-                      }}
-                      className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs transition shadow"
-                    >
-                      View Details
-                    </button>
-                  </div>
+          <div className="space-y-8">
+            {quarterGroupedEvents.map((quarter) => (
+              <div key={quarter.id} className="space-y-3">
+                {/* Quarter Section Heading */}
+                <div className="border-b border-gray-200 pb-2">
+                  <h3 className="text-base sm:text-lg font-bold text-gray-800">
+                    {quarter.title}
+                  </h3>
                 </div>
-              );
-            })}
+
+                {/* Existing Event Cards for this Quarter */}
+                <div className="grid grid-cols-1 gap-4">
+                  {quarter.events.map(renderEventCard)}
+                </div>
+              </div>
+            ))}
+
+            {/* Other / Unclassified Events (if any) */}
+            {otherEvents.length > 0 && (
+              <div className="space-y-3">
+                <div className="border-b border-gray-200 pb-2">
+                  <h3 className="text-base sm:text-lg font-bold text-gray-800">
+                    Other Events
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                  {otherEvents.map(renderEventCard)}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

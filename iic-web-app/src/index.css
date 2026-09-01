@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+*, ::before, ::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
 /* FullCalendar month events are `<a class="fc-h-event">`; Tailwind / theme can flatten backgrounds — keep blocks dark + text light */
 .fc .fc-h-event.fc-daygrid-block-event {
   color: #ffffff !important;
