@@ -3,7 +3,7 @@ import Event from "../models/Event.js";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
 
 /*
 ============================================================
@@ -1672,95 +1672,109 @@ UPDATE EVENT
 ============================================================
 */
 
-export const updateEvent =
-  async (req, res) => {
-    try {
-      const {
-        id,
-      } = req.params;
+/*
+============================================================
+UPDATE EVENT (INCLUDING MEDIA & PHOTOS)
+============================================================
+*/
 
-      const allowedFields = [
-        "title",
-        "department",
-        "date",
-        "time",
-        "venue",
-        "facultyName",
-        "facultyEmail",
-        "activityType",
-        "category",
-        "level",
-        "isCelebration",
-        "message",
-        "status",
-        "reportLink",
-        "posterLink",
-        "videoLink",
-        "photos",
-        "collegePhoto",
-        "eventPhoto",
-        "source",
-      ];
+export const updateEvent = async (req, res) => {
+  try {
+    const { id } = req.params;
 
-      const updateData = {};
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
 
-      allowedFields.forEach(
-        (field) => {
-          if (
-            req.body[field] !==
-            undefined
-          ) {
-            updateData[field] =
-              req.body[field];
-          }
+    // 1. Handle regular text/form fields update
+    const allowedFields = [
+      "title",
+      "department",
+      "date",
+      "time",
+      "venue",
+      "facultyName",
+      "facultyEmail",
+      "activityType",
+      "category",
+      "level",
+      "isCelebration",
+      "message",
+      "status",
+      "reportLink",
+      "posterLink",
+      "videoLink"
+    ];
+
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        event[field] = req.body[field];
+      }
+    });
+
+    // 2. Handle uploaded photos persistence (e.g. from frontend previews / docx extractions)
+    const uploadsDir = getUploadsDirectory();
+    
+    if (req.files && req.files.photos) {
+      const photoArray = Array.isArray(req.files.photos) ? req.files.photos : [req.files.photos];
+      const savedPhotos = [];
+
+      for (const photo of photoArray) {
+        // If the photo is already a URL string sent from frontend state, keep it
+        if (typeof photo === "string" && photo.startsWith("http")) {
+          savedPhotos.push(photo);
+          continue;
         }
-      );
 
-      const event =
-        await Event.findByIdAndUpdate(
-          id,
-          updateData,
-          {
-            new: true,
-            runValidators: true,
-          }
-        );
+        // If it's a new file upload object, save it locally to disk
+        if (photo.name && photo.mv) {
+          const filename = createFilename(`photo_${event._id}`, path.extname(photo.name));
+          const filePath = path.join(uploadsDir, filename);
+          await photo.mv(filePath);
 
-      if (!event) {
-        return res
-          .status(404)
-          .json({
-            message:
-              "Event not found",
-          });
+          const baseUrl = getServerBaseUrl(req);
+          savedPhotos.push(`${baseUrl}/uploads/events/${filename}`);
+        }
       }
 
-      res
-        .status(200)
-        .json({
-          message:
-            "Event updated successfully!",
-
-          event,
-        });
-
-    } catch (error) {
-      console.error(
-        "updateEvent Error:",
-        error
-      );
-
-      res
-        .status(500)
-        .json({
-          message:
-            "Failed to update event",
-
-          error:
-            error.message,
-        });
+      // Merge or update the photos array in MongoDB
+      if (savedPhotos.length > 0) {
+        event.photos = [...(event.photos || []), ...savedPhotos];
+      }
     }
-  };
+
+    // Also support if photos are passed as a JSON array string or array of URLs in req.body
+    if (req.body.photos) {
+      let parsedPhotos = [];
+      try {
+        parsedPhotos = typeof req.body.photos === "string" ? JSON.parse(req.body.photos) : req.body.photos;
+      } catch {
+        parsedPhotos = Array.isArray(req.body.photos) ? req.body.photos : [req.body.photos];
+      }
+      
+      if (Array.isArray(parsedPhotos)) {
+        // Combine unique URLs
+        const combined = new Set([...(event.photos || []), ...parsedPhotos]);
+        event.photos = Array.from(combined);
+      }
+    }
+
+    await event.save();
+
+    res.status(200).json({
+      message: "Event updated successfully!",
+      event,
+    });
+
+  } catch (error) {
+    console.error("updateEvent Error:", error);
+    res.status(500).json({
+      message: "Failed to update event",
+      error: error.message,
+    });
+  }
+};
 
 /*
 ============================================================
@@ -1783,338 +1797,277 @@ face information
 ============================================================
 */
 
-export const updateEventMedia =
-  async (req, res) => {
-    try {
-      const {
-        id,
-      } = req.params;
+export const updateEventMedia = async (req, res) => {
+  try {
+
+
+    const { id } = req.params;
+
+    /*
+    --------------------------------------------------------
+    FIND EVENT
+    --------------------------------------------------------
+    */
+
+    const event = await Event.findById(id);
+
+    /*
+    --------------------------------------------------------
+    UPDATE TEXT METADATA & DESCRIPTION
+    --------------------------------------------------------
+    */
+    if (req.body.venue !== undefined) {
+      event.venue = String(req.body.venue).trim();
+    }
+    if (req.body.facultyName !== undefined) {
+      event.facultyName = String(req.body.facultyName).trim();
+    }
+    if (req.body.category !== undefined) {
+      event.category = String(req.body.category).trim();
+    }
+
+    // Capture summary/description text sent from either 'message' or 'speakerDetails'
+    const eventDescription = req.body.message !== undefined ? req.body.message : req.body.speakerDetails;
+    if (eventDescription !== undefined) {
+      event.message = String(eventDescription).trim();
+    }
+
+    if (!event) {
+      return res.status(404).json({
+        message: "Event not found",
+      });
+    }
+
+    /*
+    --------------------------------------------------------
+    UPLOAD DIRECTORY
+    --------------------------------------------------------
+    */
+
+    const uploadsDir = getUploadsDirectory();
+
+    /*
+    --------------------------------------------------------
+    VIDEO LINK
+    --------------------------------------------------------
+    */
+
+    if (req.body.videoLink !== undefined) {
+      event.videoLink = String(req.body.videoLink).trim();
+    }
+
+    /*
+    --------------------------------------------------------
+    MANUAL POSTER LINK
+    --------------------------------------------------------
+    */
+
+    if (req.body.posterLink !== undefined) {
+      event.posterLink = String(req.body.posterLink).trim();
+    }
+
+    /*
+    --------------------------------------------------------
+    REPORT FILE
+    --------------------------------------------------------
+    */
+
+    const reportFile = req.files?.report;
+
+    if (reportFile) {
+      const extension = path
+        .extname(reportFile.name)
+        .toLowerCase();
 
       /*
-      --------------------------------------------------------
-      FIND EVENT
-      --------------------------------------------------------
+      ------------------------------------------------------
+      VALIDATE EXTENSION (PDF or DOCX)
+      ------------------------------------------------------
       */
 
-      const event =
-        await Event.findById(
-          id
-        );
-
-      if (!event) {
-        return res
-          .status(404)
-          .json({
-            message:
-              "Event not found",
-          });
+      if (extension !== ".pdf" && extension !== ".docx") {
+        return res.status(400).json({
+          message: "Please upload the event report as a PDF or DOCX.",
+        });
       }
 
       /*
-      --------------------------------------------------------
-      UPLOAD DIRECTORY
-      --------------------------------------------------------
+      ------------------------------------------------------
+      CREATE REPORT FILENAME
+      ------------------------------------------------------
       */
 
-      const uploadsDir =
-        getUploadsDirectory();
+      const filename = createFilename(
+        `report_${event._id}`,
+        extension === ".docx" ? ".docx" : ".pdf"
+      );
+
+      const filePath = path.join(
+        uploadsDir,
+        filename
+      );
+
+      /*
+      ------------------------------------------------------
+      SAVE REPORT
+      ------------------------------------------------------
+      */
+
+      await reportFile.mv(filePath);
+
+      const baseUrl = getServerBaseUrl(req);
+      event.reportLink = `${baseUrl}/uploads/events/${filename}`;
+
+      console.log("========================================");
+      console.log("EVENT REPORT SAVED");
+      console.log(event.reportLink);
+      console.log("========================================");
+
+      let extractedLinks = { videoLinks: [], socialMediaLinks: [] };
+      let extracted = { poster: null, renderedPhotos: [] };
 
       /*
       --------------------------------------------------------
-      VIDEO LINK
+      EXTRACT VIDEO + SOCIAL MEDIA LINKS (PDF ONLY)
       --------------------------------------------------------
       */
 
-      if (
-        req.body.videoLink !==
-        undefined
-      ) {
-        event.videoLink =
-          String(
-            req.body.videoLink
-          ).trim();
-      }
-
-      /*
-      --------------------------------------------------------
-      MANUAL POSTER LINK
-      --------------------------------------------------------
-      */
-
-      if (
-        req.body.posterLink !==
-        undefined
-      ) {
-        event.posterLink =
-          String(
-            req.body.posterLink
-          ).trim();
-      }
-
-      /*
-      --------------------------------------------------------
-      REPORT FILE
-      --------------------------------------------------------
-      */
-
-      const reportFile =
-        req.files?.report;
-
-      if (reportFile) {
-        const extension =
-          path
-            .extname(
-              reportFile.name
-            )
-            .toLowerCase();
-
-        /*
-        ------------------------------------------------------
-        ONLY PDF
-        ------------------------------------------------------
-        */
-
-        if (
-          extension !==
-          ".pdf"
-        ) {
-          return res
-            .status(400)
-            .json({
-              message:
-                "Please upload the event report as a PDF.",
-            });
+      if (extension === ".pdf") {
+        console.log("Starting PDF link extraction...");
+        try {
+          extractedLinks = await extractLinksFromPDF(filePath);
+          event.videoLinks = extractedLinks.videoLinks || [];
+          event.socialMediaLinks = extractedLinks.socialMediaLinks || [];
+        } catch (err) {
+          console.log("PDF link extraction failed:", err.message);
         }
+      } else {
+        console.log("Skipping PDF link extraction for DOCX file.");
+      }
 
-        /*
-        ------------------------------------------------------
-        CREATE REPORT FILENAME
-        ------------------------------------------------------
-        */
+      /*
+      ------------------------------------------------------
+      EXTRACT MEDIA (PDF ONLY)
+      ------------------------------------------------------
+      */
 
-        const filename =
-          createFilename(
-            `report_${event._id}`,
-            ".pdf"
-          );
-
-        const filePath =
-          path.join(
-            uploadsDir,
-            filename
-          );
-
-        /*
-        ------------------------------------------------------
-        SAVE REPORT
-        ------------------------------------------------------
-        */
-
-        await reportFile.mv(
-  filePath
-);
-
-/*
---------------------------------------------------------
-EXTRACT VIDEO + SOCIAL MEDIA LINKS
---------------------------------------------------------
-*/
-
-console.log(
-  "Starting PDF link extraction..."
-);
-
-const extractedLinks =
-  await extractLinksFromPDF(
-    filePath
-  );
-
-event.videoLinks =
-  extractedLinks.videoLinks;
-
-event.socialMediaLinks =
-  extractedLinks.socialMediaLinks;
-
-const baseUrl =
-  getServerBaseUrl(
-    req
-  );
-
-        event.reportLink =
-          `${baseUrl}/uploads/events/${filename}`;
-
-        console.log(
-          "========================================"
-        );
-
-        console.log(
-          "EVENT REPORT SAVED"
-        );
-
-        console.log(
-          event.reportLink
-        );
-
-        console.log(
-          "========================================"
-        );
-
-        /*
-        ------------------------------------------------------
-        EXTRACT MEDIA
-        ------------------------------------------------------
-        */
-
-        console.log(
-          "Starting PDF image extraction..."
-        );
-
-        const extracted =
-          await extractImagesFromPDF(
+      if (extension === ".pdf") {
+        console.log("Starting PDF image extraction...");
+        try {
+          extracted = await extractImagesFromPDF(
             filePath,
             uploadsDir
           );
-
-        /*
-        ------------------------------------------------------
-        SAVE POSTER
-        ------------------------------------------------------
-        */
-
-        if (
-          extracted.poster
-        ) {
-          event.posterLink =
-            `${baseUrl}${extracted.poster}`;
-
-          console.log(
-            "========================================"
-          );
-
-          console.log(
-            "POSTER EXTRACTED"
-          );
-
-          console.log(
-            event.posterLink
-          );
-
-          console.log(
-            "========================================"
-          );
-
-        } else {
-          console.log(
-            "No poster was detected."
-          );
+        } catch (err) {
+          console.log("PDF image extraction failed:", err.message);
         }
-
-        /*
-        ------------------------------------------------------
-        SAVE EVENT PHOTOS
-        ------------------------------------------------------
-        */
-
-        const extractedPhotoUrls =
-          extracted.renderedPhotos.map(
-            (item) =>
-              `${baseUrl}${item.url}`
-          );
-
-        if (
-          extractedPhotoUrls.length >
-          0
-        ) {
-          event.photos =
-            extractedPhotoUrls;
-
-          console.log(
-            `Saved ${extractedPhotoUrls.length} event photos.`
-          );
-
-          /*
-          ----------------------------------------------------
-          FACE INFORMATION
-          ----------------------------------------------------
-          */
-
-          const totalFaces =
-            extracted.renderedPhotos.reduce(
-              (
-                total,
-                photo
-              ) =>
-                total +
-                (
-                  photo.faceCount ||
-                  0
-                ),
-              0
-            );
-
-          console.log(
-            `Total detected faces across event photos: ${totalFaces}`
-          );
-
-        } else {
-          console.log(
-            "No event photographs detected."
-          );
-
-          event.photos =
-            [];
-        }
-
-        /*
-        ------------------------------------------------------
-        MARK SOURCE
-        ------------------------------------------------------
-        */
-
-        event.source =
-          "REPORT";
+      } else {
+        console.log("Skipping PDF image extraction for DOCX file.");
       }
 
       /*
-      --------------------------------------------------------
-      SAVE EVENT
-      --------------------------------------------------------
+      ------------------------------------------------------
+      SAVE POSTER
+      ------------------------------------------------------
       */
 
-      await event.save();
+      if (extracted && extracted.poster) {
+        event.posterLink = `${baseUrl}${extracted.poster}`;
+
+        console.log("========================================");
+        console.log("POSTER EXTRACTED");
+        console.log(event.posterLink);
+        console.log("========================================");
+      } else {
+        console.log("No poster was detected or file is DOCX.");
+      }
 
       /*
-      --------------------------------------------------------
-      RETURN
-      --------------------------------------------------------
+      ------------------------------------------------------
+      SAVE EVENT PHOTOS
+      ------------------------------------------------------
       */
 
-      res
-        .status(200)
-        .json({
-          message:
-            "Event report uploaded and media extracted successfully!",
+      const extractedPhotoUrls = extracted && extracted.renderedPhotos
+        ? extracted.renderedPhotos.map(
+            (item) => `${baseUrl}${item.url}`
+          )
+        : [];
 
-          event,
-        });
+      if (extractedPhotoUrls.length > 0) {
+        event.photos = extractedPhotoUrls;
 
-    } catch (error) {
-      console.error(
-        "updateEventMedia Error:",
-        error
-      );
+        console.log(
+          `Saved ${extractedPhotoUrls.length} event photos.`
+        );
 
-      res
-        .status(500)
-        .json({
-          message:
-            "Failed to upload report and extract media",
+        /*
+        ----------------------------------------------------
+        FACE INFORMATION
+        ----------------------------------------------------
+        */
 
-          error:
-            error.message,
-        });
+        const totalFaces =
+          extracted.renderedPhotos.reduce(
+            (total, photo) =>
+              total + (photo.faceCount || 0),
+            0
+          );
+
+        console.log(
+          `Total detected faces across event photos: ${totalFaces}`
+        );
+      } else {
+        console.log(
+          "No event photographs detected or file is DOCX."
+        );
+        if (extension === ".pdf") {
+          event.photos = [];
+        }
+      }
+
+      /*
+      ------------------------------------------------------
+      MARK SOURCE
+      ------------------------------------------------------
+      */
+
+      event.source = "REPORT";
     }
-  };
+
+    /*
+    --------------------------------------------------------
+    SAVE EVENT
+    --------------------------------------------------------
+    */
+
+    await event.save();
+
+    /*
+    --------------------------------------------------------
+    RETURN
+    --------------------------------------------------------
+    */
+
+    res.status(200).json({
+      message:
+        "Event report uploaded and media processed successfully!",
+      event,
+    });
+
+  } catch (error) {
+    console.error(
+      "updateEventMedia Error:",
+      error
+    );
+
+    res.status(500).json({
+      message:
+        "Failed to upload report and extract media",
+      error: error.message,
+    });
+  }
+};
 
 /*
 ============================================================

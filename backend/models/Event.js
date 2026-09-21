@@ -55,12 +55,7 @@ const eventSchema = new mongoose.Schema(
 
     activityType: {
       type: String,
-      enum: [
-        "IIC",
-        "CELEBRATION",
-        "SELF_DRIVEN",
-        "MIC",
-      ],
+      enum: ["IIC", "CELEBRATION", "SELF_DRIVEN", "MIC"],
       default: "IIC",
     },
 
@@ -76,13 +71,7 @@ const eventSchema = new mongoose.Schema(
 
     level: {
       type: String,
-      enum: [
-        "",
-        "BASIC",
-        "ADVANCED",
-        "RESKILLING",
-        "UPSKILLING",
-      ],
+      enum: ["", "BASIC", "ADVANCED", "RESKILLING", "UPSKILLING"],
       default: "",
     },
 
@@ -100,13 +89,18 @@ const eventSchema = new mongoose.Schema(
       default: "",
     },
 
+    speakerDetails: {
+      type: String,
+      default: "",
+    },
+
     status: {
       type: String,
       default: "COMPLETED",
     },
 
     // ============================================================
-    // REPORT / MEDIA
+    // REPORT / MEDIA & EXTRACTION PIPELINE
     // ============================================================
 
     reportLink: {
@@ -114,78 +108,66 @@ const eventSchema = new mongoose.Schema(
       default: "",
     },
 
+    // Automatically extracted poster
     posterLink: {
       type: String,
       default: "",
     },
 
+    // Existing single video link (kept for backward compatibility)
     videoLink: {
       type: String,
       default: "",
     },
 
-    photos: [
-      {
-        type: String,
-      },
-    ],
+    // Automatically extracted video links
+    videoLinks: {
+      type: [String],
+      default: [],
+    },
+
+    // Automatically extracted social-media links
+    socialMediaLinks: {
+      type: [
+        {
+          platform: {
+            type: String,
+            trim: true,
+          },
+          url: {
+            type: String,
+            trim: true,
+          },
+        },
+      ],
+      default: [],
+    },
+
+    // Extraction processing status
+    extractionStatus: {
+      type: String,
+      enum: ["NOT_STARTED", "PROCESSING", "COMPLETED", "FAILED"],
+      default: "NOT_STARTED",
+    },
+
+    extractionError: {
+      type: String,
+      default: "",
+    },
+
+    extractedAt: {
+      type: Date,
+      default: null,
+    },
 
     // ============================================================
-// EXTRACTED VIDEO LINKS
-// ============================================================
+    // EVENT PHOTOS
+    // ============================================================
 
-videoLinks: [
-  {
-    type: String,
-    trim: true,
-  },
-],
-
-// ============================================================
-// EXTRACTED SOCIAL MEDIA LINKS
-// ============================================================
-
-socialMediaLinks: [
-  {
-    platform: {
-      type: String,
-      trim: true,
+    photos: {
+      type: [String],
+      default: [],
     },
-
-    url: {
-      type: String,
-      trim: true,
-    },
-  },
-],
-
-// ============================================================
-// EVENT PHOTOS
-// ============================================================
-
-photos: [
-  {
-    url: {
-      type: String,
-      required: true,
-    },
-
-    page: {
-      type: Number,
-      default: 0,
-    },
-
-    hasFace: {
-      type: Boolean,
-      default: false,
-    },
-
-    faceCount: {
-      type: Number,
-      default: 0,
-    },
-  },
-],
 
     // ============================================================
     // OLD PHOTO FIELDS
@@ -207,12 +189,7 @@ photos: [
 
     source: {
       type: String,
-      enum: [
-        "CSV",
-        "SELF_DRIVEN",
-        "CALENDAR",
-        "REPORT",
-      ],
+      enum: ["CSV", "SELF_DRIVEN", "CALENDAR", "REPORT"],
       default: "CSV",
     },
 
@@ -249,5 +226,49 @@ photos: [
     timestamps: true,
   }
 );
+
+// ================================================================
+// NORMALIZE ARRAY FIELDS BEFORE VALIDATION
+// ================================================================
+
+eventSchema.pre("validate", function () {
+  // --------------------------------------------------------------
+  // NORMALIZE PHOTOS
+  // --------------------------------------------------------------
+
+  if (typeof this.photos === "string") {
+    this.photos = this.photos.trim() ? [this.photos.trim()] : [];
+  } else if (Array.isArray(this.photos)) {
+    this.photos = this.photos.filter(
+      (p) => typeof p === "string" && p.trim() !== ""
+    );
+  } else {
+    this.photos = [];
+  }
+
+  // --------------------------------------------------------------
+  // NORMALIZE VIDEO LINKS
+  // --------------------------------------------------------------
+
+  if (typeof this.videoLinks === "string") {
+    this.videoLinks = this.videoLinks.trim()
+      ? [this.videoLinks.trim()]
+      : [];
+  } else if (Array.isArray(this.videoLinks)) {
+    this.videoLinks = this.videoLinks.filter(
+      (v) => typeof v === "string" && v.trim() !== ""
+    );
+  } else {
+    this.videoLinks = [];
+  }
+
+  // --------------------------------------------------------------
+  // SYNC OLD videoLink WITH videoLinks
+  // --------------------------------------------------------------
+
+  if (this.videoLink && !this.videoLinks.includes(this.videoLink)) {
+    this.videoLinks.unshift(this.videoLink);
+  }
+});
 
 export default mongoose.model("Event", eventSchema);

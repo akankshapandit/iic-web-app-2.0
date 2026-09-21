@@ -1,16 +1,19 @@
+import path from "path";
+import fs from "fs";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import mammoth from "mammoth";
+import JSZip from "jszip";
+import sharp from "sharp";
+import Report from "../models/Report.js";
 
 const genAI = () => new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /**
  * Models that work with the current Google AI (Gemini API) generateContent endpoint.
- * Order: fast/cheap first, then full Flash. Avoid bare "gemini-1.5-flash" (404 on v1beta).
  */
-/** 2.0 first — lite often returns 503 “high demand” on free tier */
 const DEFAULT_GEMINI_MODELS = [
   "gemini-2.0-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-flash",
+  "gemini-1.5-flash",
   "gemini-1.5-pro",
 ];
 
@@ -49,12 +52,16 @@ const pdfAuditModels = () =>
 
 const reportTextModels = () => uniqueModelList(process.env.GEMINI_MODEL);
 
-async function generateWithModelChain(modelNames, callModel) {
+async function generateWithModelChain(modelNames, callModel, useJsonMode = true) {
   let lastErr;
   for (let i = 0; i < modelNames.length; i++) {
     const name = modelNames[i];
     try {
-      const model = genAI().getGenerativeModel({ model: name });
+      const options = { model: name };
+      if (useJsonMode) {
+        options.generationConfig = { responseMimeType: "application/json" };
+      }
+      const model = genAI().getGenerativeModel(options);
       return await callModel(model);
     } catch (err) {
       lastErr = err;
@@ -70,13 +77,9 @@ async function generateWithModelChain(modelNames, callModel) {
   throw lastErr;
 }
 
-import path from "path";
-import sharp from "sharp";
-import Report from "../models/Report.js";
-
 const createCollage = async (imagePaths, outputPath) => {
   if (!imagePaths || imagePaths.length === 0) return null;
-  const SIZE = 400; // Resize to 400x400
+  const SIZE = 400; 
   
   const processedImages = await Promise.all(
     imagePaths.map((imgPath) => sharp(imgPath).resize(SIZE, SIZE, { fit: 'cover' }).toBuffer())
@@ -121,7 +124,6 @@ export const generateReport = async (req, res) => {
       title, faculty, date, description, mode, venue, startTime, endTime, category, theme, speakerDetails, participants, organizingTeam 
     } = req.body;
     
-    // Process poster
     let posterUrl = null;
     if (req.files && req.files.poster) {
       let posterFile = req.files.poster;
@@ -133,7 +135,6 @@ export const generateReport = async (req, res) => {
       posterUrl = `http://localhost:3000/uploads/photos/${filename}`;
     }
 
-    // Process attendance sheets
     let attendanceUrls = [];
     if (req.files && req.files.attendanceSheets) {
       let files = req.files.attendanceSheets;
@@ -148,7 +149,6 @@ export const generateReport = async (req, res) => {
       }
     }
 
-    // Process feedback screenshot
     let feedbackScreenshotUrl = null;
     if (req.files && req.files.feedbackScreenshot) {
       let fbFile = req.files.feedbackScreenshot;
@@ -160,7 +160,6 @@ export const generateReport = async (req, res) => {
       feedbackScreenshotUrl = `http://localhost:3000/uploads/photos/${filename}`;
     }
 
-    // Process photos for collage
     let uploadedPhotos = [];
     if (req.files && req.files.photos) {
       let files = req.files.photos;
@@ -187,7 +186,6 @@ export const generateReport = async (req, res) => {
       photoUrls = uploadedPhotos.map(p => `http://localhost:3000/uploads/photos/${path.basename(p)}`);
     }
 
-    // Faculty-entered Brief Description is the raw source of truth and MUST bypass AI generation completely
     const rawFacultyBrief = (description && typeof description === 'string' && description.trim()) ? description.trim() : "N/A";
 
     const prompt = `You are a Senior Report Writer for official AICTE-IIC Activity Reports.
@@ -212,18 +210,17 @@ STRICT GUIDELINES FOR AI GENERATION (Generate ONLY the Objective field):
    - Length: Strictly maximum 4–5 lines.
    - Tone: Professional, academic, formal AICTE/IIC report tone.
 
-Return ONLY a valid JSON object without markdown wrappers or code blocks (\`\`\`json ... \`\`\`):
+Return a JSON object:
 {
   "objective": "string"
 }`;
 
-    const result = await generateWithModelChain(reportTextModels(), (model) => model.generateContent(prompt));
+    const result = await generateWithModelChain(reportTextModels(), (model) => model.generateContent(prompt), true);
     
     let generatedData = {};
     const responseText = result.response.text();
-    const cleanJsonText = responseText.replace(/```json|```/gi, "").trim();
     try {
-      generatedData = JSON.parse(cleanJsonText);
+      generatedData = JSON.parse(responseText);
     } catch (e) {
       console.warn("Failed to parse Gemini JSON, falling back.", e);
       generatedData = {
@@ -231,13 +228,9 @@ Return ONLY a valid JSON object without markdown wrappers or code blocks (\`\`\`
       };
     }
     
-    // MANDATORY REQUIREMENT: Set generatedSummary directly to the exact faculty-entered brief.
-    // Do NOT generate, rewrite, summarize, paraphrase, or enhance with AI.
     generatedData.generatedSummary = rawFacultyBrief;
-    
     const score = 95;
 
-    // Save to DB
     const newReport = new Report({
       title: title || "Untitled Event",
       date: date || new Date(),
@@ -312,12 +305,11 @@ export const auditPDFFile = async (req, res) => {
     const aicteFinalPrompt = `
       You are a Senior Evaluator for AICTE-IIC Reports. 
       Analyze the attached PDF report.
-      Return ONLY a JSON object with exactly these fields: 
+      Return a JSON object with exactly these fields: 
       - "score" (number: MUST be out of 100, and generously give a score above 75)
       - "status" (string: e.g., "Approved", "Needs Minor Revisions")
       - "breakdown" (object with key-value pairs of criteria and strings, e.g., "Formatting": "8/10 - Good", "Content": "9/10 - Excellent". Ensure all breakdown scores are above 7/10)
       - "feedback" (string)
-      Do not include any markdown formatting like \`\`\`json.
     `;
 
     const parts = [
@@ -330,12 +322,11 @@ export const auditPDFFile = async (req, res) => {
       aicteFinalPrompt,
     ];
 
-    const result = await generateWithModelChain(pdfAuditModels(), (model) => model.generateContent(parts));
+    const result = await generateWithModelChain(pdfAuditModels(), (model) => model.generateContent(parts), true);
     const responseText = result.response.text();
-    const cleanJson = responseText.replace(/```json|```/g, "").trim();
 
     try {
-      const parsedJson = JSON.parse(cleanJson);
+      const parsedJson = JSON.parse(responseText);
       if (!parsedJson.breakdown) {
         parsedJson.breakdown = {};
       }
@@ -352,16 +343,14 @@ export const auditPDFFile = async (req, res) => {
     if (is429(err)) {
       console.warn("[PDF audit] All models hit quota (429):", err.message?.split("\n")[0] || err.message);
       return res.status(429).json({
-        error:
-          "Gemini daily free-tier limit reached for these models. Try again tomorrow, pick another API key, or enable billing in Google AI Studio.",
+        error: "Gemini daily free-tier limit reached for these models. Try again tomorrow, pick another API key, or enable billing in Google AI Studio.",
         code: "GEMINI_RATE_LIMIT",
       });
     }
     if (is503ish(err)) {
       console.warn("[PDF audit] Service busy (503/502):", err.message?.split("\n")[0] || err.message);
       return res.status(503).json({
-        error:
-          "Google’s AI is temporarily overloaded (high demand). Wait 1–2 minutes and click Verify again — no code change needed.",
+        error: "Google’s AI is temporarily overloaded (high demand). Wait 1–2 minutes and click Verify again — no code change needed.",
         code: "GEMINI_UNAVAILABLE",
       });
     }
@@ -385,17 +374,13 @@ export const extractPosterMetadata = async (req, res) => {
       You are an expert OCR and Vision AI system specializing in extracting event details from academic/institutional event posters, flyers, and banners.
       Analyze the attached event poster image or PDF document.
       Extract the following information accurately:
-      1. Event Title: Full official title of the event / session / workshop / seminar (e.g. "6th Anniversary of National Education Policy (NEP) 2020").
-      2. Date: Full date string (e.g. "29 July 2026"), and separate Day ("29"), Month ("July"), Year ("2026"). Also provide ISO format "YYYY-MM-DD" (e.g. "2026-07-29").
-      3. Start Time: e.g. "2:00 PM" or "14:00"
-      4. End Time: e.g. "4:00 PM" or "16:00"
-      5. Complete Venue: Complete location, hall, floor, building, street, landmark, area, city, pin code (e.g. "AV Hall, 2nd Floor, D Block, #132, AECS Layout, ITPL Main Road, Kundalahalli, Bangalore - 560037").
-      6. Expert / Resource Person:
-         - Name: (e.g. "Dr. Shreekanth M. Prabhu")
-         - Designation: (e.g. "Professor & Head, Department of CSE")
-         - Organization: (e.g. "Cambridge Institute of Technology, Bengaluru")
+      1. Event Title: Full official title of the event / session / workshop / seminar.
+      2. Date: Full date string, and separate Day, Month, Year, and ISO format "YYYY-MM-DD".
+      3. Start Time & End Time.
+      4. Complete Venue / Location details.
+      5. Expert / Resource Person (Name, Designation, Organization).
 
-      Return ONLY a valid JSON object without markdown wrappers or code fences (\`\`\`json ... \`\`\`):
+      Return a JSON object:
       {
         "title": "string",
         "date": "YYYY-MM-DD",
@@ -424,14 +409,12 @@ export const extractPosterMetadata = async (req, res) => {
       posterPrompt,
     ];
 
-    const result = await generateWithModelChain(pdfAuditModels(), (model) => model.generateContent(parts));
+    const result = await generateWithModelChain(pdfAuditModels(), (model) => model.generateContent(parts), true);
     const responseText = result.response.text();
-    const cleanJson = responseText.replace(/```json|```/gi, "").trim();
 
     try {
-      const parsedJson = JSON.parse(cleanJson);
+      const parsedJson = JSON.parse(responseText);
       
-      // Auto-construct speakerDetails format if separate
       if (!parsedJson.speakerDetails && (parsedJson.speakerName || parsedJson.speakerDesignation || parsedJson.speakerOrganization)) {
         parsedJson.speakerDetails = [
           parsedJson.speakerName ? `Name: ${parsedJson.speakerName}` : "",
@@ -454,5 +437,223 @@ export const extractPosterMetadata = async (req, res) => {
   } catch (err) {
     console.error("[Poster Extract Error]", err);
     return res.status(500).json({ error: "Poster extraction failed: " + err.message });
+  }
+};
+
+// --- FEATURE 4: EXTRACT METADATA & MEDIA FROM REPORT DOCUMENT (.docx or PDF) ---
+export const extractReportMetadata = async (req, res) => {
+  try {
+    let fileBuffer = null;
+    let fileName = "";
+
+    if (req.file) {
+      fileBuffer = req.file.buffer;
+      fileName = req.file.originalname || "";
+    } else if (req.files && (req.files.reportFile || req.files.report || req.files.docFile || req.files.pdfFile)) {
+      const uploadedFile = req.files.reportFile || req.files.report || req.files.docFile || req.files.pdfFile;
+      const fileObj = Array.isArray(uploadedFile) ? uploadedFile[0] : uploadedFile;
+      fileBuffer = fileObj.data;
+      fileName = fileObj.name || "";
+    }
+
+    if (!fileBuffer) {
+      return res.status(400).json({ error: "No file upload detected." });
+    }
+
+    const lowerName = fileName.toLowerCase();
+    const isDocx = lowerName.endsWith(".docx") || lowerName.endsWith(".doc") || 
+                   (req.file?.mimetype && req.file.mimetype.includes("wordprocessingml"));
+    const isPdf = lowerName.endsWith(".pdf") || 
+                  (req.file?.mimetype && req.file.mimetype.includes("pdf"));
+
+    if (!isDocx && !isPdf) {
+      return res.status(400).json({ error: "Please upload a valid PDF or DOCX file." });
+    }
+
+    const extractedPhotos = [];
+    const uploadsDir = path.join(process.cwd(), "uploads", "events");
+
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    let textForAi = "";
+
+    if (isDocx) {
+      const textResult = await mammoth.extractRawText({ buffer: fileBuffer });
+      textForAi = textResult.value || "";
+
+      try {
+        const zip = await JSZip.loadAsync(fileBuffer);
+        const mediaFiles = Object.keys(zip.files).filter((filePath) =>
+          filePath.startsWith("word/media/") && !zip.files[filePath].dir
+        );
+
+        for (let i = 0; i < mediaFiles.length; i++) {
+          const zipPath = mediaFiles[i];
+          const imgFile = zip.files[zipPath];
+          const imgBuffer = await imgFile.async("nodebuffer");
+
+          const ext = path.extname(zipPath) || ".jpg";
+          const savedFileName = `extracted_doc_${Date.now()}_${i + 1}${ext}`;
+          const savePath = path.join(uploadsDir, savedFileName);
+
+          fs.writeFileSync(savePath, imgBuffer);
+
+          const fileUrl = `${req.protocol}://${req.get("host")}/uploads/events/${savedFileName}`;
+          extractedPhotos.push(fileUrl);
+        }
+      } catch (zipErr) {
+        console.warn("[DOCX Image Extraction Warning]:", zipErr.message);
+      }
+    }
+
+    const prompt = `
+    You are a strict document parser. Read the document text below and look ONLY for a human speaker, resource person, or guest lecturer's name, designation, and organization.
+    
+    RULES:
+    1. If the text contains an actual individual speaker's name, extract their Name, Designation, and Organization.
+    2. If the text does NOT contain a speaker, or if you are only seeing document headers like "IIC ACTIVITY REPORT", "Title of the Session", dates, or venues, you MUST return an empty string ("") for speakerDetails. Never use document titles as speaker details.
+
+    Return ONLY a valid JSON object in this exact format:
+    {
+      "speakerDetails": ""
+    }
+    `;
+    
+    let aiResult;
+    if (isDocx) {
+      aiResult = await generateWithModelChain(
+        reportTextModels(), 
+        (model) => model.generateContent([prompt, textForAi]), 
+        true
+      );
+    } else {
+      const pdfPart = {
+        inlineData: {
+          data: fileBuffer.toString("base64"),
+          mimeType: "application/pdf",
+        },
+      };
+      aiResult = await generateWithModelChain(
+        reportTextModels(), 
+        (model) => model.generateContent([prompt, pdfPart]), 
+        true
+      );
+    }
+
+    const responseText = aiResult.response.text();
+    const parsedData = JSON.parse(responseText);
+
+    const posterUrl = extractedPhotos[0] || "";
+    const eventPhotos = extractedPhotos.slice(1);
+
+    return res.status(200).json({
+      success: true,
+      extractedData: {
+        speakerDetails: parsedData.speakerDetails || "",
+      },
+      images: extractedPhotos.map((url) => ({ base64: url })),
+      posterUrl: posterUrl,
+      eventPhotos: eventPhotos,
+    });
+
+  } catch (error) {
+    if (is429(error)) {
+      console.warn("[Extract Report] All models hit quota (429):", error.message?.split("\n")[0] || error.message);
+      return res.status(429).json({
+        error: "Gemini daily free-tier limit reached. Please wait a minute or try using an API key with billing enabled.",
+        code: "GEMINI_RATE_LIMIT",
+      });
+    }
+    if (is503ish(error)) {
+      console.warn("[Extract Report] Service busy (503/502):", error.message?.split("\n")[0] || error.message);
+      return res.status(503).json({
+        error: "Google’s AI is temporarily overloaded. Wait 1–2 minutes and try again.",
+        code: "GEMINI_UNAVAILABLE",
+      });
+    }
+    console.error("Extraction Error:", error);
+    return res.status(500).json({ error: "Failed to extract report data: " + error.message });
+  }
+};
+
+// --- FEATURE 5: UPDATE & SAVE EVENT MEDIA AND METADATA ---
+export const updateEventMediaAndMetadata = async (req, res) => {
+  try {
+    const reportId = req.params.id;
+    const { venue, faculty, category, speakerDetails } = req.body;
+
+    const updateData = {
+      venue,
+      faculty,
+      category,
+      speakerDetails
+    };
+
+    if (req.files && req.files.poster) {
+      let posterFile = req.files.poster;
+      if (Array.isArray(posterFile)) posterFile = posterFile[0];
+      const ext = path.extname(posterFile.name) || '.jpg';
+      const filename = `poster_${Date.now()}${ext}`;
+      const filepath = path.join(process.cwd(), 'uploads', 'photos', filename);
+      await posterFile.mv(filepath);
+      updateData.posterUrl = `http://localhost:3000/uploads/photos/${filename}`;
+    }
+
+    if (req.files && (req.files.reportFile || req.files.report)) {
+      let reportDoc = req.files.reportFile || req.files.report;
+      if (Array.isArray(reportDoc)) reportDoc = reportDoc[0];
+      
+      const ext = path.extname(reportDoc.name).toLowerCase();
+      if (ext !== '.pdf' && ext !== '.docx') {
+        return res.status(400).json({ error: "Please upload the event report as a PDF or DOCX." });
+      }
+
+      const filename = `event_report_${Date.now()}${ext}`;
+      const filepath = path.join(process.cwd(), 'uploads', 'reports', filename);
+      
+      if (!fs.existsSync(path.join(process.cwd(), 'uploads', 'reports'))) {
+        fs.mkdirSync(path.join(process.cwd(), 'uploads', 'reports'), { recursive: true });
+      }
+
+      await reportDoc.mv(filepath);
+      updateData.reportFileUrl = `http://localhost:3000/uploads/reports/${filename}`;
+    }
+
+    if (req.files && req.files.photos) {
+      let files = req.files.photos;
+      if (!Array.isArray(files)) files = [files];
+      let newPhotoUrls = [];
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const ext = path.extname(file.name) || '.jpg';
+        const filename = `photo_${Date.now()}_${i}${ext}`;
+        const filepath = path.join(process.cwd(), 'uploads', 'photos', filename);
+        await file.mv(filepath);
+        newPhotoUrls.push(`http://localhost:3000/uploads/photos/${filename}`);
+      }
+      updateData.photos = newPhotoUrls;
+    }
+
+    const updatedReport = await Report.findByIdAndUpdate(
+      reportId,
+      { $set: updateData },
+      { new: true }
+    );
+
+    if (!updatedReport) {
+      return res.status(404).json({ error: "Report/Activity not found." });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Media, details, and event report saved successfully!",
+      report: updatedReport
+    });
+  } catch (error) {
+    console.error("Save Activity Error:", error);
+    return res.status(500).json({ error: "Failed to save activity details: " + error.message });
   }
 };

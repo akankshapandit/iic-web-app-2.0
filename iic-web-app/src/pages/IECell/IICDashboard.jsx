@@ -7,6 +7,8 @@ function IICDashboard() {
   const [events, setEvents] = useState([]);
   const [members, setMembers] = useState([]);
   const [activeTab, setActiveTab] = useState("iic");
+  const [selectedQuarter, setSelectedQuarter] = useState("all");
+
   const [loading, setLoading] = useState(true);
   const [membersLoading, setMembersLoading] = useState(false);
   const [error, setError] = useState("");
@@ -26,9 +28,7 @@ function IICDashboard() {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        "http://localhost:3000/api/events"
-      );
+      const response = await fetch("http://localhost:3000/api/events");
 
       if (!response.ok) {
         throw new Error("Failed to fetch events");
@@ -53,9 +53,7 @@ function IICDashboard() {
     try {
       setMembersLoading(true);
 
-      const response = await fetch(
-        "http://localhost:3000/api/members/list"
-      );
+      const response = await fetch("http://localhost:3000/api/members/list");
 
       if (!response.ok) {
         throw new Error("Failed to fetch members");
@@ -97,7 +95,56 @@ function IICDashboard() {
   };
 
   // =========================================================
-  // FILTER EVENTS
+  // GET QUARTER FROM EVENT DATE
+  // =========================================================
+  const getQuarter = (dateValue) => {
+    if (!dateValue) {
+      return null;
+    }
+
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    const month = date.getMonth() + 1;
+
+    if ([9, 10, 11].includes(month)) {
+      return 1;
+    }
+
+    if ([12, 1, 2].includes(month)) {
+      return 2;
+    }
+
+    if ([3, 4, 5].includes(month)) {
+      return 3;
+    }
+
+    if ([6, 7, 8].includes(month)) {
+      return 4;
+    }
+
+    return null;
+  };
+
+  // =========================================================
+  // FILTER EVENTS BY QUARTER
+  // =========================================================
+
+  const quarterFilteredEvents = useMemo(() => {
+    if (selectedQuarter === "all") {
+      return events;
+    }
+
+    return events.filter(
+      (event) => getQuarter(event.date) === Number(selectedQuarter)
+    );
+  }, [events, selectedQuarter]);
+
+  // =========================================================
+  // FILTER EVENTS BY CATEGORY
   // =========================================================
 
   const filteredEvents = useMemo(() => {
@@ -106,15 +153,12 @@ function IICDashboard() {
     }
 
     // IIC EVENTS
-    // Self Driven events are also considered IIC events
     if (activeTab === "iic") {
-      return events.filter(
+      return quarterFilteredEvents.filter(
         (event) =>
-          (
-            event.activityType === "IIC" ||
+          (event.activityType === "IIC" ||
             event.activityType === "SELF_DRIVEN" ||
-            event.source === "SELF_DRIVEN"
-          ) &&
+            event.source === "SELF_DRIVEN") &&
           !event.isCelebration &&
           event.activityType !== "CELEBRATION"
       );
@@ -122,88 +166,77 @@ function IICDashboard() {
 
     // CELEBRATION EVENTS
     if (activeTab === "celebration") {
-      return events.filter(
-        (event) =>
-          event.isCelebration ||
-          event.activityType === "CELEBRATION"
+      return quarterFilteredEvents.filter(
+        (event) => event.isCelebration || event.activityType === "CELEBRATION"
       );
     }
 
     // SELF DRIVEN EVENTS
     if (activeTab === "self") {
-      return events.filter(
+      return quarterFilteredEvents.filter(
         (event) =>
-          event.activityType === "SELF_DRIVEN" ||
-          event.source === "SELF_DRIVEN"
+          event.activityType === "SELF_DRIVEN" || event.source === "SELF_DRIVEN"
       );
     }
 
     // MIC EVENTS
     if (activeTab === "mic") {
-      return events.filter(
-        (event) =>
-          event.activityType === "MIC"
+      return quarterFilteredEvents.filter(
+        (event) => event.activityType === "MIC"
       );
     }
 
     // MIC LEVELS
-    if (
-      [
-        "basic",
-        "advanced",
-        "reskilling",
-        "upskilling",
-      ].includes(activeTab)
-    ) {
-      return events.filter(
+    if (["basic", "advanced", "reskilling", "upskilling"].includes(activeTab)) {
+      return quarterFilteredEvents.filter(
         (event) =>
           event.activityType === "MIC" &&
-          (
-            event.level ||
-            event.micLevel ||
-            ""
-          ).toUpperCase() ===
+          (event.level || event.micLevel || "").toUpperCase() ===
             activeTab.toUpperCase()
       );
     }
 
     return [];
-  }, [events, activeTab]);
+  }, [quarterFilteredEvents, activeTab]);
 
   // =========================================================
   // EVENT STATS
   // =========================================================
 
   const stats = {
-    total: events.length,
+    total: quarterFilteredEvents.length,
 
-    iic: events.filter(
+    iic: quarterFilteredEvents.filter(
       (event) =>
-        (
-          event.activityType === "IIC" ||
+        (event.activityType === "IIC" ||
           event.activityType === "SELF_DRIVEN" ||
-          event.source === "SELF_DRIVEN"
-        ) &&
+          event.source === "SELF_DRIVEN") &&
         !event.isCelebration &&
         event.activityType !== "CELEBRATION"
     ).length,
 
-    celebration: events.filter(
-      (event) =>
-        event.isCelebration ||
-        event.activityType === "CELEBRATION"
+    celebration: quarterFilteredEvents.filter(
+      (event) => event.isCelebration || event.activityType === "CELEBRATION"
     ).length,
 
-    selfDriven: events.filter(
+    selfDriven: quarterFilteredEvents.filter(
       (event) =>
-        event.activityType === "SELF_DRIVEN" ||
-        event.source === "SELF_DRIVEN"
+        event.activityType === "SELF_DRIVEN" || event.source === "SELF_DRIVEN"
     ).length,
 
-    mic: events.filter(
-      (event) =>
-        event.activityType === "MIC"
-    ).length,
+    mic: quarterFilteredEvents.filter((event) => event.activityType === "MIC")
+      .length,
+  };
+
+  // =========================================================
+  // QUARTER COUNTS
+  // =========================================================
+
+  const quarterCounts = {
+    1: events.filter((event) => getQuarter(event.date) === 1).length,
+    2: events.filter((event) => getQuarter(event.date) === 2).length,
+    3: events.filter((event) => getQuarter(event.date) === 3).length,
+    4: events.filter((event) => getQuarter(event.date) === 4).length,
   };
 
   // =========================================================
@@ -219,14 +252,11 @@ function IICDashboard() {
       return date;
     }
 
-    return parsedDate.toLocaleDateString(
-      "en-IN",
-      {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }
-    );
+    return parsedDate.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   // =========================================================
@@ -235,10 +265,7 @@ function IICDashboard() {
 
   const getMemberName = (member) => {
     return (
-      member.facultyName ||
-      member.name ||
-      member.faculty ||
-      "Unknown Faculty"
+      member.facultyName || member.name || member.faculty || "Unknown Faculty"
     );
   };
 
@@ -247,9 +274,7 @@ function IICDashboard() {
   // =========================================================
 
   const getMemberEvents = (member) => {
-    const memberName = getMemberName(member)
-      .trim()
-      .toLowerCase();
+    const memberName = getMemberName(member).trim().toLowerCase();
 
     return events.filter((event) => {
       const eventFaculty = (
@@ -274,31 +299,24 @@ function IICDashboard() {
 
     const iicEvents = memberEvents.filter(
       (event) =>
-        (
-          event.activityType === "IIC" ||
+        (event.activityType === "IIC" ||
           event.activityType === "SELF_DRIVEN" ||
-          event.source === "SELF_DRIVEN"
-        ) &&
+          event.source === "SELF_DRIVEN") &&
         !event.isCelebration &&
         event.activityType !== "CELEBRATION"
     );
 
     const celebrationEvents = memberEvents.filter(
-      (event) =>
-        event.isCelebration ||
-        event.activityType === "CELEBRATION"
+      (event) => event.isCelebration || event.activityType === "CELEBRATION"
     );
 
     const selfDrivenEvents = memberEvents.filter(
       (event) =>
-        event.activityType === "SELF_DRIVEN" ||
-        event.source === "SELF_DRIVEN"
+        event.activityType === "SELF_DRIVEN" || event.source === "SELF_DRIVEN"
     );
 
     const completedEvents = memberEvents.filter(
-      (event) =>
-        String(event.status || "")
-          .toUpperCase() === "COMPLETED"
+      (event) => String(event.status || "").toUpperCase() === "COMPLETED"
     );
 
     return {
@@ -311,24 +329,13 @@ function IICDashboard() {
   };
 
   // =========================================================
-  // GO DIRECTLY TO MEMBER DASHBOARD
+  // GO TO MEMBER DASHBOARD
   // =========================================================
 
   const openMemberDashboard = (member) => {
     const facultyName = getMemberName(member);
 
-    /*
-      We store the selected faculty temporarily.
-
-      MemberDashboard will read this value and show
-      the selected faculty's dashboard without requiring
-      the faculty member to log in again.
-    */
-
-    localStorage.setItem(
-      "selectedMemberForIIC",
-      facultyName
-    );
+    localStorage.setItem("selectedMemberForIIC", facultyName);
 
     navigate("/member-dashboard");
   };
@@ -339,11 +346,7 @@ function IICDashboard() {
 
   const LinkButton = ({ url, text }) => {
     if (!url) {
-      return (
-        <span className="text-gray-400 text-sm">
-          —
-        </span>
-      );
+      return <span className="text-gray-400 text-sm">—</span>;
     }
 
     return (
@@ -362,20 +365,12 @@ function IICDashboard() {
   // SIDEBAR BUTTON
   // =========================================================
 
-  const SidebarButton = ({
-    id,
-    children,
-    count,
-    onClick,
-  }) => {
+  const SidebarButton = ({ id, children, count, onClick }) => {
     const active = activeTab === id;
 
     return (
       <button
-        onClick={
-          onClick ||
-          (() => setActiveTab(id))
-        }
+        onClick={onClick || (() => setActiveTab(id))}
         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left transition ${
           active
             ? "bg-blue-600 text-white shadow-md"
@@ -419,60 +414,35 @@ function IICDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex">
-
       {/* ================================================= */}
       {/* SIDEBAR */}
       {/* ================================================= */}
 
       <aside className="w-72 bg-white border-r border-slate-200 min-h-screen fixed left-0 top-0">
-
-        {/* LOGO / TITLE */}
-
         <div className="px-6 py-7 border-b border-slate-200">
+          <h1 className="text-2xl font-bold text-blue-700">IIC Dashboard</h1>
 
-          <h1 className="text-2xl font-bold text-blue-700">
-            IIC Dashboard
-          </h1>
-
-          <p className="text-sm text-slate-500 mt-1">
-            {role}
-          </p>
-
+          <p className="text-sm text-slate-500 mt-1">{role}</p>
         </div>
 
-        {/* NAVIGATION */}
-
         <div className="p-4 space-y-2">
-
           <p className="text-xs uppercase font-bold text-slate-400 px-3 mb-3">
             Events
           </p>
 
-          <SidebarButton
-            id="iic"
-            count={stats.iic}
-          >
+          <SidebarButton id="iic" count={stats.iic}>
             IIC Events
           </SidebarButton>
 
-          <SidebarButton
-            id="celebration"
-            count={stats.celebration}
-          >
+          <SidebarButton id="celebration" count={stats.celebration}>
             Celebration Events
           </SidebarButton>
 
-          <SidebarButton
-            id="self"
-            count={stats.selfDriven}
-          >
+          <SidebarButton id="self" count={stats.selfDriven}>
             Self Driven Events
           </SidebarButton>
 
-          <SidebarButton
-            id="mic"
-            count={stats.mic}
-          >
+          <SidebarButton id="mic" count={stats.mic}>
             MIC Events
           </SidebarButton>
 
@@ -480,59 +450,38 @@ function IICDashboard() {
 
           {activeTab === "mic" && (
             <div className="ml-4 pl-3 border-l-2 border-blue-100 space-y-1">
+              <SidebarButton id="basic">Basic</SidebarButton>
 
-              <SidebarButton id="basic">
-                Basic
-              </SidebarButton>
+              <SidebarButton id="advanced">Advanced</SidebarButton>
 
-              <SidebarButton id="advanced">
-                Advanced
-              </SidebarButton>
+              <SidebarButton id="reskilling">Reskilling</SidebarButton>
 
-              <SidebarButton id="reskilling">
-                Reskilling
-              </SidebarButton>
-
-              <SidebarButton id="upskilling">
-                Upskilling
-              </SidebarButton>
-
+              <SidebarButton id="upskilling">Upskilling</SidebarButton>
             </div>
           )}
 
           {/* MEMBERS */}
 
           <div className="pt-6">
-
             <p className="text-xs uppercase font-bold text-slate-400 px-3 mb-3">
               Members
             </p>
 
-            <SidebarButton
-              id="members"
-              onClick={openMemberTracker}
-            >
+            <SidebarButton id="members" onClick={openMemberTracker}>
               Member Tracker
             </SidebarButton>
-
           </div>
-
         </div>
 
         {/* USER / LOGOUT */}
 
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
-
           <div className="mb-3">
-
             <p className="font-semibold text-slate-800">
               {localStorage.getItem("iicUsername")}
             </p>
 
-            <p className="text-xs text-slate-500">
-              {role}
-            </p>
-
+            <p className="text-xs text-slate-500">{role}</p>
           </div>
 
           <button
@@ -541,9 +490,7 @@ function IICDashboard() {
           >
             Logout
           </button>
-
         </div>
-
       </aside>
 
       {/* ================================================= */}
@@ -551,15 +498,11 @@ function IICDashboard() {
       {/* ================================================= */}
 
       <main className="ml-72 flex-1">
-
         {/* HEADER */}
 
         <header className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 text-white px-10 py-8">
-
           <div className="flex items-center justify-between">
-
             <div>
-
               <p className="text-blue-200 text-sm font-medium">
                 Innovation & Entrepreneurship Cell
               </p>
@@ -577,43 +520,26 @@ function IICDashboard() {
                   ? "View faculty activity information and access individual member dashboards."
                   : "Monitor institutional innovation activities, reports and events."}
               </p>
-
             </div>
 
             <div className="bg-white/10 rounded-2xl px-6 py-4">
+              <p className="text-sm text-blue-100">Logged in as</p>
 
-              <p className="text-sm text-blue-100">
-                Logged in as
-              </p>
-
-              <p className="font-bold text-lg">
-                {role}
-              </p>
-
+              <p className="font-bold text-lg">{role}</p>
             </div>
-
           </div>
-
         </header>
 
         <div className="p-8">
-
           {/* ================================================= */}
           {/* MEMBER TRACKER */}
           {/* ================================================= */}
 
           {activeTab === "members" ? (
-
             <div>
-
-              {/* MEMBER TRACKER HEADER */}
-
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
-
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-
                   <div>
-
                     <h2 className="text-2xl font-bold text-slate-800">
                       IIC Faculty Member Tracker
                     </h2>
@@ -621,15 +547,12 @@ function IICDashboard() {
                     <p className="text-sm text-slate-500 mt-1">
                       View each member's event participation and open their personalized dashboard.
                     </p>
-
                   </div>
 
                   <div className="bg-blue-50 text-blue-700 px-4 py-3 rounded-xl font-semibold text-sm">
                     {members.length} Members
                   </div>
-
                 </div>
-
               </div>
 
               {error && (
@@ -638,26 +561,16 @@ function IICDashboard() {
                 </div>
               )}
 
-              {/* LOADING */}
-
               {membersLoading ? (
-
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-16 text-center">
-
-                  <div className="text-3xl mb-3">
-                    🌀
-                  </div>
+                  <div className="text-3xl mb-3">🌀</div>
 
                   <p className="font-semibold text-slate-600">
                     Loading member information...
                   </p>
-
                 </div>
-
               ) : members.length === 0 ? (
-
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-16 text-center">
-
                   <p className="text-lg font-bold text-slate-700">
                     No members found.
                   </p>
@@ -665,21 +578,13 @@ function IICDashboard() {
                   <p className="text-sm text-slate-500 mt-2">
                     Make sure the backend member list is available.
                   </p>
-
                 </div>
-
               ) : (
-
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-
                   <div className="overflow-x-auto">
-
                     <table className="min-w-[1200px] w-full">
-
                       <thead className="bg-slate-50">
-
                         <tr>
-
                           <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
                             S.No
                           </th>
@@ -715,42 +620,25 @@ function IICDashboard() {
                           <th className="px-5 py-4 text-center text-xs font-bold uppercase text-slate-500">
                             Dashboard
                           </th>
-
                         </tr>
-
                       </thead>
 
                       <tbody className="divide-y divide-slate-100">
-
                         {members.map((member, index) => {
+                          const memberName = getMemberName(member);
 
-                          const memberName =
-                            getMemberName(member);
-
-                          const memberStats =
-                            getMemberStats(member);
+                          const memberStats = getMemberStats(member);
 
                           return (
-
                             <tr
-                              key={
-                                member._id ||
-                                member.id ||
-                                index
-                              }
+                              key={member._id || member.id || index}
                               className="hover:bg-blue-50/50 transition"
                             >
-
-                              {/* S.NO */}
-
                               <td className="px-5 py-4 text-sm font-medium text-slate-600">
                                 {index + 1}
                               </td>
 
-                              {/* FACULTY */}
-
                               <td className="px-5 py-4">
-
                                 <div className="font-bold text-slate-800">
                                   {memberName}
                                 </div>
@@ -760,420 +648,384 @@ function IICDashboard() {
                                     {member.email}
                                   </div>
                                 )}
-
                               </td>
 
-                              {/* DEPARTMENT */}
-
                               <td className="px-5 py-4">
-
                                 <span className="inline-flex px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">
                                   {member.department || "CMRIT"}
                                 </span>
-
                               </td>
 
-                              {/* TOTAL */}
-
                               <td className="px-5 py-4 text-center">
-
                                 <span className="inline-flex min-w-9 justify-center px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold">
                                   {memberStats.total}
                                 </span>
-
                               </td>
 
-                              {/* IIC */}
-
                               <td className="px-5 py-4 text-center">
-
                                 <span className="font-bold text-blue-600">
                                   {memberStats.iic}
                                 </span>
-
                               </td>
 
-                              {/* CELEBRATION */}
-
                               <td className="px-5 py-4 text-center">
-
                                 <span className="font-bold text-purple-600">
                                   {memberStats.celebration}
                                 </span>
-
                               </td>
 
-                              {/* SELF DRIVEN */}
-
                               <td className="px-5 py-4 text-center">
-
                                 <span className="font-bold text-green-600">
                                   {memberStats.selfDriven}
                                 </span>
-
                               </td>
 
-                              {/* COMPLETED */}
-
                               <td className="px-5 py-4 text-center">
-
                                 <span className="font-bold text-emerald-600">
                                   {memberStats.completed}
                                 </span>
-
                               </td>
 
-                              {/* DASHBOARD */}
-
                               <td className="px-5 py-4 text-center">
-
                                 <button
-                                  onClick={() =>
-                                    openMemberDashboard(member)
-                                  }
+                                  onClick={() => openMemberDashboard(member)}
                                   className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition"
                                 >
                                   Go to Dashboard →
                                 </button>
-
                               </td>
-
                             </tr>
-
                           );
-
                         })}
-
                       </tbody>
-
                     </table>
-
                   </div>
-
                 </div>
-
               )}
-
             </div>
-
           ) : (
-
             <>
               {/* ================================================= */}
-              {/* STAT CARDS */}
+              {/* QUARTER BANNERS */}
               {/* ================================================= */}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-800">
+                      Events by Quarter
+                    </h2>
 
-                {/* TOTAL */}
+                    <p className="text-sm text-slate-500 mt-1">
+                      Select a quarter to view its events.
+                    </p>
+                  </div>
 
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-
-                  <p className="text-slate-500 text-sm">
-                    Total Events
-                  </p>
-
-                  <p className="text-4xl font-bold mt-2">
-                    {stats.total}
-                  </p>
-
+                  {selectedQuarter !== "all" && (
+                    <button
+                      onClick={() => setSelectedQuarter("all")}
+                      className="text-sm font-semibold text-blue-600 hover:text-blue-800"
+                    >
+                      Show All Events
+                    </button>
+                  )}
                 </div>
 
-                {/* IIC */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                  {/* QUARTER 1 */}
+                  <button
+                    onClick={() => setSelectedQuarter("1")}
+                    className={`text-left rounded-2xl p-6 border transition-all duration-200 ${
+                      selectedQuarter === "1"
+                        ? "bg-blue-600 text-white border-blue-600 shadow-lg scale-[1.02]"
+                        : "bg-white text-slate-800 border-slate-200 hover:border-blue-300 hover:shadow-md"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p
+                          className={`text-sm font-medium ${
+                            selectedQuarter === "1"
+                              ? "text-blue-100"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          QUARTER
+                        </p>
 
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                        <h3 className="text-2xl font-bold mt-1">Quarter 1</h3>
+                      </div>
 
-                  <p className="text-slate-500 text-sm">
-                    IIC Events
-                  </p>
+                      <div
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold ${
+                          selectedQuarter === "1"
+                            ? "bg-white/20 text-white"
+                            : "bg-blue-50 text-blue-600"
+                        }`}
+                      >
+                        Q1
+                      </div>
+                    </div>
 
-                  <p className="text-4xl font-bold text-blue-600 mt-2">
-                    {stats.iic}
-                  </p>
+                    <p
+                      className={`mt-4 text-sm font-medium ${
+                        selectedQuarter === "1"
+                          ? "text-blue-100"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {quarterCounts[1]} event(s)
+                    </p>
+                  </button>
 
+                  {/* QUARTER 2 */}
+                  <button
+                    onClick={() => setSelectedQuarter("2")}
+                    className={`text-left rounded-2xl p-6 border transition-all duration-200 ${
+                      selectedQuarter === "2"
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-lg scale-[1.02]"
+                        : "bg-white text-slate-800 border-slate-200 hover:border-indigo-300 hover:shadow-md"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p
+                          className={`text-sm font-medium ${
+                            selectedQuarter === "2"
+                              ? "text-indigo-100"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          QUARTER
+                        </p>
+
+                        <h3 className="text-2xl font-bold mt-1">Quarter 2</h3>
+                      </div>
+
+                      <div
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold ${
+                          selectedQuarter === "2"
+                            ? "bg-white/20 text-white"
+                            : "bg-indigo-50 text-indigo-600"
+                        }`}
+                      >
+                        Q2
+                      </div>
+                    </div>
+
+                    <p
+                      className={`mt-4 text-sm font-medium ${
+                        selectedQuarter === "2"
+                          ? "text-indigo-100"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {quarterCounts[2]} event(s)
+                    </p>
+                  </button>
+
+                  {/* QUARTER 3 */}
+                  <button
+                    onClick={() => setSelectedQuarter("3")}
+                    className={`text-left rounded-2xl p-6 border transition-all duration-200 ${
+                      selectedQuarter === "3"
+                        ? "bg-purple-600 text-white border-purple-600 shadow-lg scale-[1.02]"
+                        : "bg-white text-slate-800 border-slate-200 hover:border-purple-300 hover:shadow-md"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p
+                          className={`text-sm font-medium ${
+                            selectedQuarter === "3"
+                              ? "text-purple-100"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          QUARTER
+                        </p>
+
+                        <h3 className="text-2xl font-bold mt-1">Quarter 3</h3>
+                      </div>
+
+                      <div
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold ${
+                          selectedQuarter === "3"
+                            ? "bg-white/20 text-white"
+                            : "bg-purple-50 text-purple-600"
+                        }`}
+                      >
+                        Q3
+                      </div>
+                    </div>
+
+                    <p
+                      className={`mt-4 text-sm font-medium ${
+                        selectedQuarter === "3"
+                          ? "text-purple-100"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {quarterCounts[3]} event(s)
+                    </p>
+                  </button>
+
+                  {/* QUARTER 4 */}
+                  <button
+                    onClick={() => setSelectedQuarter("4")}
+                    className={`text-left rounded-2xl p-6 border transition-all duration-200 ${
+                      selectedQuarter === "4"
+                        ? "bg-orange-500 text-white border-orange-500 shadow-lg scale-[1.02]"
+                        : "bg-white text-slate-800 border-slate-200 hover:border-orange-300 hover:shadow-md"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p
+                          className={`text-sm font-medium ${
+                            selectedQuarter === "4"
+                              ? "text-orange-100"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          QUARTER
+                        </p>
+
+                        <h3 className="text-2xl font-bold mt-1">Quarter 4</h3>
+                      </div>
+
+                      <div
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold ${
+                          selectedQuarter === "4"
+                            ? "bg-white/20 text-white"
+                            : "bg-orange-50 text-orange-600"
+                        }`}
+                      >
+                        Q4
+                      </div>
+                    </div>
+
+                    <p
+                      className={`mt-4 text-sm font-medium ${
+                        selectedQuarter === "4"
+                          ? "text-orange-100"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {quarterCounts[4]} event(s)
+                    </p>
+                  </button>
                 </div>
-
-                {/* CELEBRATIONS */}
-
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-
-                  <p className="text-slate-500 text-sm">
-                    Celebrations
-                  </p>
-
-                  <p className="text-4xl font-bold text-purple-600 mt-2">
-                    {stats.celebration}
-                  </p>
-
-                </div>
-
-                {/* SELF DRIVEN */}
-
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-
-                  <p className="text-slate-500 text-sm">
-                    Self Driven
-                  </p>
-
-                  <p className="text-4xl font-bold text-green-600 mt-2">
-                    {stats.selfDriven}
-                  </p>
-
-                </div>
-
-                {/* MIC */}
-
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-
-                  <p className="text-slate-500 text-sm">
-                    MIC Events
-                  </p>
-
-                  <p className="text-4xl font-bold text-orange-500 mt-2">
-                    {stats.mic}
-                  </p>
-
-                </div>
-
               </div>
 
-              {/* ERROR */}
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6">
-                  {error}
-                </div>
-              )}
-
               {/* ================================================= */}
-              {/* EVENTS TABLE */}
+              {/* EVENT TABLE */}
               {/* ================================================= */}
 
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-slate-800 uppercase tracking-wide">
+                    {activeTab} Events List ({filteredEvents.length})
+                  </h3>
 
-                <div className="px-6 py-5 border-b border-slate-200">
-
-                  <h2 className="text-2xl font-bold text-slate-800">
-
-                    {activeTab === "iic" &&
-                      "IIC Events"}
-
-                    {activeTab === "celebration" &&
-                      "Celebration Events"}
-
-                    {activeTab === "self" &&
-                      "Self Driven Events"}
-
-                    {activeTab === "mic" &&
-                      "MIC Events"}
-
-                    {activeTab === "basic" &&
-                      "MIC - Basic"}
-
-                    {activeTab === "advanced" &&
-                      "MIC - Advanced"}
-
-                    {activeTab === "reskilling" &&
-                      "MIC - Reskilling"}
-
-                    {activeTab === "upskilling" &&
-                      "MIC - Upskilling"}
-
-                  </h2>
-
-                  <p className="text-sm text-slate-500 mt-1">
-                    {filteredEvents.length} event(s)
-                  </p>
-
+                  {selectedQuarter !== "all" && (
+                    <span className="text-xs font-semibold px-3 py-1 bg-blue-50 text-blue-700 rounded-full">
+                      Filtering by Quarter {selectedQuarter}
+                    </span>
+                  )}
                 </div>
 
-                <div className="overflow-x-auto">
-
-                  <table className="min-w-[1400px] w-full">
-
-                    <thead className="bg-slate-50">
-
-                      <tr>
-
-                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
-                          S.No
-                        </th>
-
-                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
-                          Title
-                        </th>
-
-                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
-                          Date
-                        </th>
-
-                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
-                          Faculty / Coordinator
-                        </th>
-
-                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
-                          Department
-                        </th>
-
-                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
-                          Report
-                        </th>
-
-                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
-                          Poster
-                        </th>
-
-                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
-                          Video
-                        </th>
-
-                        <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
-                          Photos
-                        </th>
-
-                      </tr>
-
-                    </thead>
-
-                    <tbody className="divide-y divide-slate-100">
-
-                      {filteredEvents.length === 0 ? (
-
+                {filteredEvents.length === 0 ? (
+                  <div className="p-16 text-center text-slate-500">
+                    No events found for this selection.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[1000px]">
+                      <thead className="bg-slate-50 border-b border-slate-100">
                         <tr>
-
-                          <td
-                            colSpan="9"
-                            className="text-center py-16 text-slate-500"
-                          >
-                            No events found.
-                          </td>
-
+                          <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                            Title / Event
+                          </th>
+                          <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                            Faculty / Dept
+                          </th>
+                          <th className="px-5 py-4 text-left text-xs font-bold uppercase text-slate-500">
+                            Date & Venue
+                          </th>
+                          <th className="px-5 py-4 text-center text-xs font-bold uppercase text-slate-500">
+                            Report
+                          </th>
+                          <th className="px-5 py-4 text-center text-xs font-bold uppercase text-slate-500">
+                            Media Link
+                          </th>
                         </tr>
+                      </thead>
 
-                      ) : (
-
-                        filteredEvents.map(
-                          (event, index) => (
-
-                            <tr
-                              key={event._id}
-                              className="hover:bg-slate-50"
-                            >
-
-                              <td className="px-5 py-4 font-medium">
-                                {index + 1}
-                              </td>
-
-                              <td className="px-5 py-4">
-
-                                <div className="font-semibold text-slate-800">
-                                  {event.title}
-                                </div>
-
-                                {event.category && (
-                                  <div className="text-xs text-slate-400 mt-1">
-                                    {event.category}
-                                  </div>
-                                )}
-
-                              </td>
-
-                              <td className="px-5 py-4 whitespace-nowrap">
-                                {formatDate(event.date)}
-                              </td>
-
-                              <td className="px-5 py-4">
-                                {event.facultyName || "N/A"}
-                              </td>
-
-                              <td className="px-5 py-4">
-                                {event.department || "N/A"}
-                              </td>
-
-                              <td className="px-5 py-4">
-
-                                <LinkButton
-                                  url={event.reportLink}
-                                  text="View Report"
-                                />
-
-                              </td>
-
-                              <td className="px-5 py-4">
-
-                                <LinkButton
-                                  url={event.posterLink}
-                                  text="View Poster"
-                                />
-
-                              </td>
-
-                              <td className="px-5 py-4">
-
-                                <LinkButton
-                                  url={event.videoLink}
-                                  text="Watch Video"
-                                />
-
-                              </td>
-
-                              <td className="px-5 py-4">
-
-                                {event.photos?.length > 0 ? (
-
-                                  <a
-                                    href={event.photos[0]}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                                  >
-                                    View Photos
-                                  </a>
-
-                                ) : event.eventPhoto ? (
-
-                                  <a
-                                    href={event.eventPhoto}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                                  >
-                                    View Photos
-                                  </a>
-
-                                ) : (
-
-                                  <span className="text-gray-400">
-                                    —
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredEvents.map((event, idx) => (
+                          <tr
+                            key={event._id || idx}
+                            className="hover:bg-slate-50/80 transition"
+                          >
+                            <td className="px-5 py-4">
+                              <p className="font-bold text-slate-800">
+                                {event.title}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-600 font-semibold">
+                                  {event.category || "Workshop"}
+                                </span>
+                                {event.level && (
+                                  <span className="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-600 font-semibold">
+                                    {event.level}
                                   </span>
-
                                 )}
+                              </div>
+                            </td>
 
-                              </td>
+                            <td className="px-5 py-4">
+                              <p className="text-sm font-medium text-slate-700">
+                                {event.facultyName || "Unknown"}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                {event.department || "N/A"}
+                              </p>
+                            </td>
 
-                            </tr>
+                            <td className="px-5 py-4">
+                              <p className="text-sm font-medium text-slate-700">
+                                {formatDate(event.date)}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                {event.venue || "TBD"}
+                              </p>
+                            </td>
 
-                          )
-                        )
+                            <td className="px-5 py-4 text-center">
+                              <LinkButton
+                                url={event.reportLink}
+                                text="View Report"
+                              />
+                            </td>
 
-                      )}
-
-                    </tbody>
-
-                  </table>
-
-                </div>
-
+                            <td className="px-5 py-4 text-center">
+                              <LinkButton
+                                url={event.videoLink || (event.videoLinks && event.videoLinks[0])}
+                                text="Watch Media"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-
             </>
-
           )}
-
         </div>
-
       </main>
-
     </div>
   );
 }

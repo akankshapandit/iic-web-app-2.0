@@ -2,6 +2,10 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+import Event from "../models/Event.js";
+import User from "../models/User.js";
+import bcrypt from "bcryptjs";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -157,11 +161,12 @@ export const seedCSVData = async () => {
     for (const [fName, dept] of facultyMap.entries()) {
       // Create email slug
       const emailSlug = fName
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, ".")
-        .replace(/\.+/g, ".")
-        .replace(/^\.|\.$/g, "");
-      const facultyEmail = `${emailSlug}@cmrit.ac.in`;
+  .toLowerCase()
+  .replace(/[^a-z0-9]/g, ".")
+  .replace(/\.+/g, ".")
+  .replace(/^\.+|\.+$/g, "");
+
+const facultyEmail = `${emailSlug}@cmrit.ac.in`;
 
       const existingUser = await User.findOne({
         $or: [{ facultyName: fName }, { email: facultyEmail }]
