@@ -21,11 +21,19 @@ const reportSchema = new mongoose.Schema(
     highlights: { type: String, default: "" },
     outcomes: { type: String, default: "" },
     feedback: { type: String, default: "" },
-    
+    activityId: { type: String, required: true, unique: true },
     generatedText: { type: String, required: true },
     score: { type: Number, required: true },
     photos: [{ type: String }],
-    collageUrl: { type: String }
+    collageUrl: { type: String },
+
+    // Files section properly nested inside the main schema object
+    files: {
+      reportPath: String,
+      posterPath: String,
+      finalPdfPath: String,
+      photoPaths: [String],
+    },
   },
   { timestamps: true }
 );

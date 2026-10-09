@@ -6,6 +6,7 @@ import JSZip from "jszip";
 import sharp from "sharp";
 import Report from "../models/Report.js";
 
+
 const genAI = () => new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /**
@@ -294,6 +295,35 @@ Return a JSON object:
   }
 };
 
+export const getReportByActivityId = async (req, res) => {
+  try {
+    const reportId = req.params.id;
+    
+    // Check if the ID is a valid 24-character hex MongoDB ObjectId
+    const isObjectId = reportId.match(/^[0-9a-fA-F]{24}$/);
+
+    let report = null;
+    if (isObjectId) {
+      // Try finding by MongoDB _id first
+      report = await Report.findById(reportId);
+    }
+
+    // If not found by _id (or if it's a custom string ID), try finding by activityId
+    if (!report) {
+      report = await Report.findOne({ activityId: reportId });
+    }
+
+    if (!report) {
+      return res.status(404).json({ message: "No saved data found." });
+    }
+
+    return res.status(200).json(report);
+  } catch (error) {
+    console.error("Error fetching report:", error);
+    return res.status(500).json({ error: "Internal server error: " + error.message });
+  }
+};
+
 // --- FEATURE 2: FINAL PDF FILE AUDITOR ---
 export const auditPDFFile = async (req, res) => {
   try {
@@ -441,6 +471,7 @@ export const extractPosterMetadata = async (req, res) => {
 };
 
 // --- FEATURE 4: EXTRACT METADATA & MEDIA FROM REPORT DOCUMENT (.docx or PDF) ---
+// --- FEATURE 4: EXTRACT METADATA & MEDIA FROM REPORT DOCUMENT (.docx or PDF) ---
 export const extractReportMetadata = async (req, res) => {
   try {
     let fileBuffer = null;
@@ -508,15 +539,21 @@ export const extractReportMetadata = async (req, res) => {
       }
     }
 
+    // UPDATED PROMPT: Now extracts venue, facultyName, and speakerDetails
     const prompt = `
-    You are a strict document parser. Read the document text below and look ONLY for a human speaker, resource person, or guest lecturer's name, designation, and organization.
+    You are a strict document parser. Read the document text below and extract the following details if present:
+    1. Venue: The physical location, hall, auditorium, or online platform where the event took place.
+    2. Faculty / Coordinator: The name of the faculty coordinator or organizer leading the activity.
+    3. Speaker Details: A human speaker, resource person, or guest lecturer's name, designation, and organization.
     
     RULES:
-    1. If the text contains an actual individual speaker's name, extract their Name, Designation, and Organization.
-    2. If the text does NOT contain a speaker, or if you are only seeing document headers like "IIC ACTIVITY REPORT", "Title of the Session", dates, or venues, you MUST return an empty string ("") for speakerDetails. Never use document titles as speaker details.
+    - If a field is not found, return an empty string ("").
+    - Never use generic document headers like "IIC ACTIVITY REPORT" as values.
 
     Return ONLY a valid JSON object in this exact format:
     {
+      "venue": "",
+      "facultyName": "",
       "speakerDetails": ""
     }
     `;
@@ -551,6 +588,9 @@ export const extractReportMetadata = async (req, res) => {
     return res.status(200).json({
       success: true,
       extractedData: {
+        venue: parsedData.venue || "",
+        facultyName: parsedData.facultyName || parsedData.faculty || "",
+        faculty: parsedData.facultyName || parsedData.faculty || "",
         speakerDetails: parsedData.speakerDetails || "",
       },
       images: extractedPhotos.map((url) => ({ base64: url })),
@@ -591,16 +631,47 @@ export const updateEventMediaAndMetadata = async (req, res) => {
       speakerDetails
     };
 
+    // 1. FIXED: Handle Final PDF Report upload using express-fileupload (.mv)
+    if (req.files && (req.files.finalPdf || req.files.pdf)) {
+      let pdfFile = req.files.finalPdf || req.files.pdf;
+      if (Array.isArray(pdfFile)) pdfFile = pdfFile[0];
+
+      const ext = path.extname(pdfFile.name).toLowerCase();
+      if (ext !== '.pdf') {
+        return res.status(400).json({ error: "Please upload the final report as a PDF." });
+      }
+
+      const filename = `final_report_${Date.now()}${ext}`;
+      const reportsDir = path.join(process.cwd(), 'uploads', 'reports');
+
+      if (!fs.existsSync(reportsDir)) {
+        fs.mkdirSync(reportsDir, { recursive: true });
+      }
+
+      const filepath = path.join(reportsDir, filename);
+      await pdfFile.mv(filepath);
+      updateData.finalPdf = `http://localhost:3000/uploads/reports/${filename}`;
+    } else if (req.body.finalPdfUrl) {
+      updateData.finalPdf = req.body.finalPdfUrl;
+    }
+
+    // 2. Handle Poster Upload
     if (req.files && req.files.poster) {
       let posterFile = req.files.poster;
       if (Array.isArray(posterFile)) posterFile = posterFile[0];
       const ext = path.extname(posterFile.name) || '.jpg';
       const filename = `poster_${Date.now()}${ext}`;
       const filepath = path.join(process.cwd(), 'uploads', 'photos', filename);
+      
+      if (!fs.existsSync(path.join(process.cwd(), 'uploads', 'photos'))) {
+        fs.mkdirSync(path.join(process.cwd(), 'uploads', 'photos'), { recursive: true });
+      }
+
       await posterFile.mv(filepath);
       updateData.posterUrl = `http://localhost:3000/uploads/photos/${filename}`;
     }
 
+    // 3. Handle Report Document Upload (.docx / .pdf)
     if (req.files && (req.files.reportFile || req.files.report)) {
       let reportDoc = req.files.reportFile || req.files.report;
       if (Array.isArray(reportDoc)) reportDoc = reportDoc[0];
@@ -611,47 +682,64 @@ export const updateEventMediaAndMetadata = async (req, res) => {
       }
 
       const filename = `event_report_${Date.now()}${ext}`;
-      const filepath = path.join(process.cwd(), 'uploads', 'reports', filename);
+      const reportsDir = path.join(process.cwd(), 'uploads', 'reports');
       
-      if (!fs.existsSync(path.join(process.cwd(), 'uploads', 'reports'))) {
-        fs.mkdirSync(path.join(process.cwd(), 'uploads', 'reports'), { recursive: true });
+      if (!fs.existsSync(reportsDir)) {
+        fs.mkdirSync(reportsDir, { recursive: true });
       }
 
+      const filepath = path.join(reportsDir, filename);
       await reportDoc.mv(filepath);
       updateData.reportFileUrl = `http://localhost:3000/uploads/reports/${filename}`;
     }
 
+    // 4. Handle Event Photos Upload
     if (req.files && req.files.photos) {
       let files = req.files.photos;
       if (!Array.isArray(files)) files = [files];
       let newPhotoUrls = [];
       
+      const photosDir = path.join(process.cwd(), 'uploads', 'photos');
+      if (!fs.existsSync(photosDir)) {
+        fs.mkdirSync(photosDir, { recursive: true });
+      }
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const ext = path.extname(file.name) || '.jpg';
         const filename = `photo_${Date.now()}_${i}${ext}`;
-        const filepath = path.join(process.cwd(), 'uploads', 'photos', filename);
+        const filepath = path.join(photosDir, filename);
         await file.mv(filepath);
         newPhotoUrls.push(`http://localhost:3000/uploads/photos/${filename}`);
       }
       updateData.photos = newPhotoUrls;
     }
 
-    const updatedReport = await Report.findByIdAndUpdate(
-      reportId,
-      { $set: updateData },
-      { new: true }
+    // 5. Update Database Record
+    const updatedEvent = await Event.findByIdAndUpdate(
+      req.params.id, 
+      updateData, 
+      { new: true } 
     );
 
-    if (!updatedReport) {
+    const updatedReport = await Report.findOneAndUpdate(
+      { activityId: reportId },
+      { $set: updateData },
+      { new: true, upsert: true }
+    );
+
+    if (!updatedEvent && !updatedReport) {
       return res.status(404).json({ error: "Report/Activity not found." });
     }
 
+    // 6. Return response successfully back to frontend
     return res.status(200).json({
       success: true,
       message: "Media, details, and event report saved successfully!",
+      event: updatedEvent,
       report: updatedReport
     });
+
   } catch (error) {
     console.error("Save Activity Error:", error);
     return res.status(500).json({ error: "Failed to save activity details: " + error.message });

@@ -1799,23 +1799,16 @@ face information
 
 export const updateEventMedia = async (req, res) => {
   try {
-
-
     const { id } = req.params;
 
-    /*
-    --------------------------------------------------------
-    FIND EVENT
-    --------------------------------------------------------
-    */
-
     const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
 
-    /*
-    --------------------------------------------------------
-    UPDATE TEXT METADATA & DESCRIPTION
-    --------------------------------------------------------
-    */
+    /* ========================================================
+       UPDATE TEXT METADATA & SPEAKER DETAILS
+    ======================================================== */
     if (req.body.venue !== undefined) {
       event.venue = String(req.body.venue).trim();
     }
@@ -1825,250 +1818,124 @@ export const updateEventMedia = async (req, res) => {
     if (req.body.category !== undefined) {
       event.category = String(req.body.category).trim();
     }
-
-    // Capture summary/description text sent from either 'message' or 'speakerDetails'
-    const eventDescription = req.body.message !== undefined ? req.body.message : req.body.speakerDetails;
-    if (eventDescription !== undefined) {
-      event.message = String(eventDescription).trim();
+    if (req.body.speakerDetails !== undefined) {
+      event.speakerDetails = String(req.body.speakerDetails).trim();
     }
-
-    if (!event) {
-      return res.status(404).json({
-        message: "Event not found",
-      });
+    if (req.body.message !== undefined) {
+      event.message = String(req.body.message).trim();
     }
-
-    /*
-    --------------------------------------------------------
-    UPLOAD DIRECTORY
-    --------------------------------------------------------
-    */
-
-    const uploadsDir = getUploadsDirectory();
-
-    /*
-    --------------------------------------------------------
-    VIDEO LINK
-    --------------------------------------------------------
-    */
-
     if (req.body.videoLink !== undefined) {
       event.videoLink = String(req.body.videoLink).trim();
     }
-
-    /*
-    --------------------------------------------------------
-    MANUAL POSTER LINK
-    --------------------------------------------------------
-    */
-
     if (req.body.posterLink !== undefined) {
       event.posterLink = String(req.body.posterLink).trim();
     }
 
-    /*
-    --------------------------------------------------------
-    REPORT FILE
-    --------------------------------------------------------
-    */
+    const uploadsDir = getUploadsDirectory();
+    const baseUrl = getServerBaseUrl(req);
 
+    /* ========================================================
+       HANDLE FILES (Report, Final PDF, Poster, Photos)
+    ======================================================== */
     const reportFile = req.files?.report;
+    const finalPdfFile = req.files?.finalPdf;
+    const posterFile = req.files?.poster;
+    const photoFiles = req.files?.photos; // Can be a single file object or an array of files
 
+    // 1. Handle Report File (.pdf or .docx)
     if (reportFile) {
-      const extension = path
-        .extname(reportFile.name)
-        .toLowerCase();
-
-      /*
-      ------------------------------------------------------
-      VALIDATE EXTENSION (PDF or DOCX)
-      ------------------------------------------------------
-      */
-
+      const extension = path.extname(reportFile.name).toLowerCase();
       if (extension !== ".pdf" && extension !== ".docx") {
-        return res.status(400).json({
-          message: "Please upload the event report as a PDF or DOCX.",
-        });
+        return res.status(400).json({ message: "Please upload the event report as a PDF or DOCX." });
       }
 
-      /*
-      ------------------------------------------------------
-      CREATE REPORT FILENAME
-      ------------------------------------------------------
-      */
-
-      const filename = createFilename(
-        `report_${event._id}`,
-        extension === ".docx" ? ".docx" : ".pdf"
-      );
-
-      const filePath = path.join(
-        uploadsDir,
-        filename
-      );
-
-      /*
-      ------------------------------------------------------
-      SAVE REPORT
-      ------------------------------------------------------
-      */
-
+      const filename = createFilename(`report_${event._id}`, extension === ".docx" ? ".docx" : ".pdf");
+      const filePath = path.join(uploadsDir, filename);
       await reportFile.mv(filePath);
 
-      const baseUrl = getServerBaseUrl(req);
       event.reportLink = `${baseUrl}/uploads/events/${filename}`;
+      event.source = "REPORT";
 
-      console.log("========================================");
-      console.log("EVENT REPORT SAVED");
-      console.log(event.reportLink);
-      console.log("========================================");
-
-      let extractedLinks = { videoLinks: [], socialMediaLinks: [] };
-      let extracted = { poster: null, renderedPhotos: [] };
-
-      /*
-      --------------------------------------------------------
-      EXTRACT VIDEO + SOCIAL MEDIA LINKS (PDF ONLY)
-      --------------------------------------------------------
-      */
-
+      // PDF Extractions if applicable
       if (extension === ".pdf") {
-        console.log("Starting PDF link extraction...");
         try {
-          extractedLinks = await extractLinksFromPDF(filePath);
+          const extractedLinks = await extractLinksFromPDF(filePath);
           event.videoLinks = extractedLinks.videoLinks || [];
           event.socialMediaLinks = extractedLinks.socialMediaLinks || [];
         } catch (err) {
           console.log("PDF link extraction failed:", err.message);
         }
-      } else {
-        console.log("Skipping PDF link extraction for DOCX file.");
-      }
 
-      /*
-      ------------------------------------------------------
-      EXTRACT MEDIA (PDF ONLY)
-      ------------------------------------------------------
-      */
-
-      if (extension === ".pdf") {
-        console.log("Starting PDF image extraction...");
         try {
-          extracted = await extractImagesFromPDF(
-            filePath,
-            uploadsDir
-          );
+          const extracted = await extractImagesFromPDF(filePath, uploadsDir);
+          if (extracted && extracted.poster) {
+            event.posterLink = `${baseUrl}${extracted.poster}`;
+          }
+          const extractedPhotoUrls = extracted && extracted.renderedPhotos
+            ? extracted.renderedPhotos.map((item) => `${baseUrl}${item.url}`)
+            : [];
+          if (extractedPhotoUrls.length > 0) {
+            event.photos = extractedPhotoUrls;
+          }
         } catch (err) {
           console.log("PDF image extraction failed:", err.message);
         }
-      } else {
-        console.log("Skipping PDF image extraction for DOCX file.");
       }
-
-      /*
-      ------------------------------------------------------
-      SAVE POSTER
-      ------------------------------------------------------
-      */
-
-      if (extracted && extracted.poster) {
-        event.posterLink = `${baseUrl}${extracted.poster}`;
-
-        console.log("========================================");
-        console.log("POSTER EXTRACTED");
-        console.log(event.posterLink);
-        console.log("========================================");
-      } else {
-        console.log("No poster was detected or file is DOCX.");
-      }
-
-      /*
-      ------------------------------------------------------
-      SAVE EVENT PHOTOS
-      ------------------------------------------------------
-      */
-
-      const extractedPhotoUrls = extracted && extracted.renderedPhotos
-        ? extracted.renderedPhotos.map(
-            (item) => `${baseUrl}${item.url}`
-          )
-        : [];
-
-      if (extractedPhotoUrls.length > 0) {
-        event.photos = extractedPhotoUrls;
-
-        console.log(
-          `Saved ${extractedPhotoUrls.length} event photos.`
-        );
-
-        /*
-        ----------------------------------------------------
-        FACE INFORMATION
-        ----------------------------------------------------
-        */
-
-        const totalFaces =
-          extracted.renderedPhotos.reduce(
-            (total, photo) =>
-              total + (photo.faceCount || 0),
-            0
-          );
-
-        console.log(
-          `Total detected faces across event photos: ${totalFaces}`
-        );
-      } else {
-        console.log(
-          "No event photographs detected or file is DOCX."
-        );
-        if (extension === ".pdf") {
-          event.photos = [];
-        }
-      }
-
-      /*
-      ------------------------------------------------------
-      MARK SOURCE
-      ------------------------------------------------------
-      */
-
-      event.source = "REPORT";
     }
 
-    /*
-    --------------------------------------------------------
-    SAVE EVENT
-    --------------------------------------------------------
-    */
+    // 2. Handle Final PDF Report
+    if (finalPdfFile) {
+      const filename = createFilename(`final_report_${event._id}`, ".pdf");
+      const filePath = path.join(uploadsDir, filename);
+      await finalPdfFile.mv(filePath);
+      event.reportLink = `${baseUrl}/uploads/events/${filename}`;
+    }
 
+    // 3. Handle Manual Poster Upload
+    if (posterFile) {
+      const extension = path.extname(posterFile.name).toLowerCase();
+      const filename = createFilename(`poster_${event._id}`, extension);
+      const filePath = path.join(uploadsDir, filename);
+      await posterFile.mv(filePath);
+      event.posterLink = `${baseUrl}/uploads/events/${filename}`;
+    }
+
+    // 4. Handle Event Photos (supports single file or multiple files array)
+    if (photoFiles) {
+      const photosArray = Array.isArray(photoFiles) ? photoFiles : [photoFiles];
+      const savedPhotoUrls = [];
+
+      for (let i = 0; i < photosArray.length; i++) {
+        const photo = photosArray[i];
+        const extension = path.extname(photo.name).toLowerCase();
+        const filename = createFilename(`event_photo_${event._id}_${i + 1}`, extension);
+        const filePath = path.join(uploadsDir, filename);
+        await photo.mv(filePath);
+        savedPhotoUrls.push(`${baseUrl}/uploads/events/${filename}`);
+      }
+
+      // Append or replace photos safely
+      event.photos = [...(event.photos || []), ...savedPhotoUrls];
+    }
+
+    /* ========================================================
+       SAVE CHANGES TO DATABASE
+    ======================================================== */
     await event.save();
 
-    /*
-    --------------------------------------------------------
-    RETURN
-    --------------------------------------------------------
-    */
-
     res.status(200).json({
-      message:
-        "Event report uploaded and media processed successfully!",
+      message: "Event metadata and media updated successfully!",
       event,
     });
 
   } catch (error) {
-    console.error(
-      "updateEventMedia Error:",
-      error
-    );
-
+    console.error("updateEventMedia Error:", error);
     res.status(500).json({
-      message:
-        "Failed to upload report and extract media",
+      message: "Failed to update event media and metadata",
       error: error.message,
     });
   }
 };
-
 /*
 ============================================================
 DELETE EVENT

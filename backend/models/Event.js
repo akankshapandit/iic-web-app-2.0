@@ -32,6 +32,7 @@ const eventSchema = new mongoose.Schema(
       type: String,
       default: "TBD",
     },
+    
 
     // ============================================================
     // COORDINATOR INFORMATION

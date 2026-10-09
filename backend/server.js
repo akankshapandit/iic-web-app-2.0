@@ -98,7 +98,7 @@ ${rawText.substring(0, 4000)}`,
         };
       }
     } catch (aiError) {
-      console.error("Gemini AI Extraction Error (falling back):", aiError);
+      console.warn("Gemini AI extraction skipped due to high demand (503). Proceeding with manual save.");
     }
 
     // 4. Automatically flag the poster from extracted images

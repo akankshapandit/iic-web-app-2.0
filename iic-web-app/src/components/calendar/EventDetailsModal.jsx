@@ -10,6 +10,22 @@ function EventDetailsModal({ event, onClose, onUpdate, onDelete }) {
   const [autoReminder, setAutoReminder] = useState(event.autoReminder || false);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+  const fetchFreshEventData = async () => {
+    if (isOpen && eventId) {
+      try {
+        const response = await axios.get(`/api/events/${eventId}`);
+        // Assuming response.data or response.data.event holds your event document
+        setEvent(response.data.event || response.data);
+      } catch (error) {
+        console.error("Error fetching event details:", error);
+      }
+    }
+  };
+
+  fetchFreshEventData();
+}, [isOpen, eventId]);
+
   const handleSaveSettings = async () => {
     try {
       setLoading(true);

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import axios from 'axios';
 
 function DepartmentCalendar() {
   const today = new Date();
@@ -9,10 +10,8 @@ function DepartmentCalendar() {
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [selectedActivities, setSelectedActivities] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
-  const [showModal, setShowModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploading, setUploading] = useState(false);
-
   const [newActivity, setNewActivity] = useState({
     title: "",
     coordinator: "",
@@ -65,8 +64,10 @@ function DepartmentCalendar() {
         }));
 
       setActivities(departmentEvents);
+      return departmentEvents; // Return parsed events for chain use
     } catch (error) {
       console.error("Failed to fetch events:", error);
+      return [];
     }
   };
 
@@ -117,7 +118,6 @@ function DepartmentCalendar() {
     if (dayActivities.length > 0) {
       setSelectedActivities(dayActivities);
       setSelectedDate(day);
-      setShowModal(true);
     }
   };
 
@@ -135,12 +135,20 @@ function DepartmentCalendar() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Failed to update event");
 
-      await fetchEvents();
-      setSelectedActivities((prev) =>
-        prev.map((activity) =>
-          activity.id === id ? { ...activity, status: "COMPLETED" } : activity
-        )
-      );
+      const updatedList = await fetchEvents();
+      // Sync selected activities popup list instantly
+      if (selectedDate) {
+        const refreshedDayActivities = updatedList.filter((activity) => {
+          if (!activity.date) return false;
+          const [d, month, year] = activity.date.split(" ");
+          return (
+            parseInt(d) === selectedDate &&
+            monthMap[month] === currentMonth &&
+            parseInt(year) === currentYear
+          );
+        });
+        setSelectedActivities(refreshedDayActivities);
+      }
     } catch (error) {
       console.error("Failed to mark event completed:", error);
       alert(error.message || "Failed to update event.");
@@ -156,8 +164,8 @@ function DepartmentCalendar() {
       const formData = new FormData();
 
       if (extractedForm) {
-        if (extractedForm.venue) formData.append("venue", extractedForm.venue);
-        if (extractedForm.coordinator) formData.append("facultyName", extractedForm.coordinator);
+        /*if (extractedForm.venue) formData.append("venue", extractedForm.venue);*/
+        /*if (extractedForm.coordinator) formData.append("facultyName", extractedForm.coordinator);*/
         if (extractedForm.category) formData.append("category", extractedForm.category);
         if (extractedForm.speakerDetails) formData.append("speakerDetails", extractedForm.speakerDetails);
       }
@@ -177,36 +185,21 @@ function DepartmentCalendar() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Failed to upload media");
 
-      const updatedEvent = data.event;
-      const updatedActivity = {
-        id: updatedEvent._id,
-        title: updatedEvent.title,
-        coordinator: updatedEvent.facultyName || "Not Assigned",
-        department: updatedEvent.department || department || "N/A",
-        date: new Date(updatedEvent.date).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }),
-        status: String(updatedEvent.status || "UPCOMING").toUpperCase(),
-        reportUploaded: !!updatedEvent.reportLink,
-        photos: Array.isArray(updatedEvent.photos) ? updatedEvent.photos : [],
-        time: updatedEvent.time || "",
-        venue: updatedEvent.venue || "",
-        activityType: updatedEvent.activityType || "IIC",
-        category: updatedEvent.category || "Workshop",
-        level: updatedEvent.level || "",
-        message: updatedEvent.message || "",
-        speakerDetails: updatedEvent.speakerDetails || "",
-        source: updatedEvent.source || "",
-      };
+      // Fetch fresh global list and update modal state immediately so data persists on re-open
+      const updatedActivitiesList = await fetchEvents();
 
-      setActivities((prev) =>
-        prev.map((a) => (a.id === activityId ? updatedActivity : a))
-      );
-      setSelectedActivities((prev) =>
-        prev.map((a) => (a.id === activityId ? updatedActivity : a))
-      );
+      if (selectedDate) {
+        const refreshedDayActivities = updatedActivitiesList.filter((activity) => {
+          if (!activity.date) return false;
+          const [d, month, year] = activity.date.split(" ");
+          return (
+            parseInt(d) === selectedDate &&
+            monthMap[month] === currentMonth &&
+            parseInt(year) === currentYear
+          );
+        });
+        setSelectedActivities(refreshedDayActivities);
+      }
 
       alert("Report, media, and metadata saved successfully!");
     } catch (error) {
@@ -256,7 +249,7 @@ function DepartmentCalendar() {
   };
 
   return (
-    <div className="bg-white rounded-3xl shadow-xl p-8">
+    <div className="bg-white rounded-3xl shadow-xl p-8 relative">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
         <div>
@@ -324,7 +317,7 @@ function DepartmentCalendar() {
       </div>
 
       {/* CALENDAR CELLS */}
-      <div className="grid grid-cols-7 gap-3">
+      <div className="grid grid-cols-7 gap-3 mb-8">
         {cells.map((date, index) => {
           const dayActivities = date ? getActivitiesForDate(date) : [];
 
@@ -372,28 +365,28 @@ function DepartmentCalendar() {
         })}
       </div>
 
-      {/* ACTIVITY DETAILS & UPLOAD MODAL */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-6">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden max-h-[90vh] overflow-y-auto">
-            <div className="bg-gradient-to-r from-blue-700 to-indigo-600 p-6 text-white">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-2xl font-bold">Activity Details</h2>
-                  <p className="text-blue-100 mt-1">
-                    {selectedDate} {months[currentMonth]} {currentYear}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="bg-white/20 hover:bg-white/30 rounded-full w-10 h-10 text-xl flex items-center justify-center"
-                >
-                  ✕
-                </button>
+      {/* ACTIVITY DETAILS POPUP MODAL */}
+      {selectedDate && selectedActivities.length > 0 && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="p-6 border-b flex justify-between items-center bg-gray-50 sticky top-0 z-10">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-800">
+                  Activity Details — {selectedDate} {months[currentMonth]} {currentYear}
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">Manage metadata and upload reports for this date</p>
               </div>
+              <button
+                onClick={() => setSelectedDate(null)}
+                className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold flex items-center justify-center transition"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="p-6">
+            {/* Modal Content Scroll Area */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
               {selectedActivities.map((activity) => (
                 <ActivityMediaCard
                   key={activity.id}
@@ -410,7 +403,7 @@ function DepartmentCalendar() {
 
       {/* ADD ACTIVITY MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8">
             <h2 className="text-2xl font-bold mb-6">Add New Activity</h2>
             <div className="space-y-4">
@@ -464,34 +457,106 @@ function DepartmentCalendar() {
 }
 
 /* ================================================================
-   ACTIVITY MEDIA CARD (WITH SMART HEURISTIC POSTER SCORER)
+   ACTIVITY MEDIA CARD (WITH PROP SYNCHRONIZATION)
 ================================================================ */
-function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia }) {
+function ActivityMediaCard({ activity = {}, uploading, onMarkCompleted, fetchEvents }) {
   const [previewImage, setPreviewImage] = useState(null);
   const [reportFile, setReportFile] = useState(null);
   const [posterFile, setPosterFile] = useState(null);
   const [photoFiles, setPhotoFiles] = useState([]);
-  const [isExtracting, setIsExtracting] = useState(false);
   const [finalPdfFile, setFinalPdfFile] = useState(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [isDeletingMedia, setIsDeletingMedia] = useState(false);
   
-  const [formData, setFormData] = useState({
-    title: activity.title || "",
-    coordinator: activity.coordinator || "",
-    venue: activity.venue || "",
-    category: activity.category || "Workshop",
-    speakerDetails: activity.speakerDetails || "",
-  });
+  const activityId = activity?.id || activity?._id; 
 
-  // Sync state if activity prop updates externally
+  const getSavedPdfFromActivity = (act) => {
+    return (
+      act?.finalPdf || 
+      act?.finalPdfUrl || 
+      act?.pdfUrl || 
+      act?.pdf || 
+      act?.pdfPath || 
+      act?.signedPdf || 
+      act?.final_pdf ||
+      act?.reportPdf ||
+      act?.document
+    );
+  };
+
+  // Keep state fully synchronized with incoming activity prop updates from parent
   useEffect(() => {
-    setFormData({
-      title: activity.title || "",
-      coordinator: activity.coordinator || "",
-      venue: activity.venue || "",
-      category: activity.category || "Workshop",
-      speakerDetails: activity.speakerDetails || "",
-    });
+    if (activity) {
+      setFormData({
+        title: activity.title || "",
+        /*venue: activity.venue || "",
+        facultyName: activity.facultyName || activity.faculty || activity.coordinator || "",*/
+        category: activity.category || "Workshop",
+        speakerDetails: activity.speakerDetails || "",
+      });
+
+      if (Array.isArray(activity.photos) && activity.photos.length > 0) {
+        setPhotoFiles(activity.photos);
+      } else {
+        setPhotoFiles([]); 
+      }
+
+      const savedReport = activity.reportFileUrl || activity.report || activity.reportFile || activity.reportUrl;
+      if (savedReport) {
+        let reportUrl = "";
+        let reportName = "Saved_Report";
+
+        if (typeof savedReport === "string") {
+          reportUrl = savedReport;
+          reportName = savedReport.split("/").pop() || "Saved_Report";
+        } else if (typeof savedReport === "object" && savedReport !== null) {
+          reportUrl = savedReport.url || savedReport.path || "";
+          reportName = savedReport.name || reportUrl.split("/").pop() || "Saved_Report";
+        }
+
+        setReportFile((prev) => (prev instanceof File ? prev : { name: reportName, url: reportUrl, isSaved: true }));
+      } else {
+        setReportFile((prev) => (prev instanceof File ? prev : null));
+      }
+
+      const savedPdf = getSavedPdfFromActivity(activity);
+      if (savedPdf) {
+        let pdfUrl = "";
+        let pdfName = "Saved_Final_Report.pdf";
+
+        if (typeof savedPdf === "string") {
+          pdfUrl = savedPdf;
+          pdfName = savedPdf.split("/").pop() || "Saved_Final_Report.pdf";
+        } else if (typeof savedPdf === "object" && savedPdf !== null) {
+          pdfUrl = savedPdf.url || savedPdf.path || "";
+          pdfName = savedPdf.name || pdfUrl.split("/").pop() || "Saved_Final_Report.pdf";
+        }
+
+        if (pdfUrl) {
+          setFinalPdfFile((prev) => (prev instanceof File ? prev : { 
+            name: pdfName, 
+            url: pdfUrl, 
+            isSaved: true 
+          }));
+        }
+      } else {
+        setFinalPdfFile((prev) => (prev instanceof File ? prev : prev));
+      }
+
+      const savedPoster = activity.posterUrl || activity.poster;
+      if (savedPoster && !posterFile) {
+        setPosterFile(savedPoster);
+      }
+    }
   }, [activity]);
+
+  const [formData, setFormData] = useState({
+    title: activity?.title || "",
+    /*venue: activity?.venue || "",
+    facultyName: activity?.facultyName || activity?.faculty || activity?.coordinator || "", */
+    category: activity?.category || "Workshop",
+    speakerDetails: activity?.speakerDetails || "",
+  });
 
   const base64ToFile = (base64String, filename) => {
     const arr = base64String.split(",");
@@ -510,6 +575,7 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
     if (!file) return;
 
     setReportFile(file);
+    setPhotoFiles([]);
     setIsExtracting(true);
 
     const isPdf = file.type === "application/pdf" || file.name.endsWith(".pdf");
@@ -547,7 +613,6 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
           formattedSpeakerDetails = rawSpeaker || "";
         }
 
-        // --- CLEAN & FILTER BOILERPLATE & EMPTY LABELS ---
         let lines = formattedSpeakerDetails.split("\n").map(l => l.trim()).filter(l => {
           const lower = l.toLowerCase();
           return (
@@ -564,8 +629,10 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
 
         setFormData((prev) => ({
           ...prev,
+          // Extract venue from document data (falls back to existing state if not found)
           venue: data.extractedData.venue || prev.venue,
-          coordinator: data.extractedData.coordinator || prev.coordinator,
+          // Extract faculty/coordinator name from document data (supports common field variations)
+          facultyName: data.extractedData.facultyName || data.extractedData.coordinator || prev.facultyName,
           category: data.extractedData.category || prev.category,
           speakerDetails: finalSpeakerText || prev.speakerDetails,
         }));
@@ -582,13 +649,12 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
               const aspectRatio = height / width;
               const area = width * height;
 
-              // --- SMART HEURISTIC SCORING SYSTEM ---
               let score = 0;
               if (aspectRatio > 1.1) score += 40;
-              if (aspectRatio > 1.3) score += 30; // Flyer proportion
+              if (aspectRatio > 1.3) score += 30;
               if (area > 50000) score += 20;
               if (area > 150000) score += 20;
-              if (width > height) score -= 100; // Landscape penalty
+              if (width > height) score -= 100;
 
               resolve({
                 file: base64ToFile(img.base64, `extracted_image_${index + 1}.png`),
@@ -601,8 +667,6 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
         });
 
         const processedImages = await Promise.all(imagePromises);
-
-        // Sort images by calculated score (highest score wins)
         processedImages.sort((a, b) => b.score - a.score);
 
         let posterCandidate = null;
@@ -617,7 +681,7 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
         const remainingImages = processedImages.filter((img) => img !== posterCandidate);
         setPhotoFiles(remainingImages.map((img) => img.file));
 
-        alert(`Successfully processed and routed extracted images using smart scoring!`);
+        alert(`Successfully processed document images and metadata!`);
       } else if (isPdf) {
         alert("PDF text and metadata successfully extracted!");
       }
@@ -629,51 +693,130 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
     }
   };
 
-  const handleSave = () => {
-    onUploadMedia(
-      activity.id,
-      { report: reportFile, finalPdf: finalPdfFile, poster: posterFile, photos: photoFiles },
-      formData
-    );
+  // Handler to clear / delete all media files to start fresh
+  const handleDeleteAllMedia = async () => {
+    if (!window.confirm("Are you sure you want to delete all uploaded media and files for this activity? This will clear local state and remove them from the server.")) {
+      return;
+    }
+
+    setIsDeletingMedia(true);
+    try {
+      // Optional: Call a backend endpoint to wipe media if you have one, or just clear frontend state & save empty
+      const response = await axios.put(
+        `http://localhost:3000/api/events/${activityId}/media`,
+        {
+          venue: "",
+          faculty: "",
+          category: formData.category,
+          speakerDetails: "",
+          clearMedia: true // flag for backend if needed
+        }
+      );
+
+      // Clear local states
+      setFinalPdfFile(null);
+      setReportFile(null);
+      setPosterFile(null);
+      setPhotoFiles([]);
+      setFormData((prev) => ({
+        ...prev,
+        venue: "",
+        facultyName: "",
+        speakerDetails: "",
+      }));
+
+      alert("All media and files have been cleared successfully!");
+      if (typeof fetchEvents === "function") {
+        fetchEvents();
+      }
+    } catch (err) {
+      console.error("Failed to delete media:", err);
+      // Fallback: Clear client state even if backend route isn't configured for a full delete
+      setFinalPdfFile(null);
+      setReportFile(null);
+      setPosterFile(null);
+      setPhotoFiles([]);
+      alert("Cleared local media state.");
+    } finally {
+      setIsDeletingMedia(false);
+    }
   };
 
-  const [posterPreviewUrl, setPosterPreviewUrl] = useState(null);
+  const handleSave = async () => {
+    try {
+      const data = new FormData();
+      
+      data.append("venue", formData.venue);
+      data.append("faculty", formData.facultyName);
+      data.append("category", formData.category);
+      data.append("speakerDetails", formData.speakerDetails);
 
-  useEffect(() => {
-    if (!posterFile) {
-      setPosterPreviewUrl(null);
-      return;
+      if (finalPdfFile) {
+        if (finalPdfFile instanceof File) {
+          data.append("finalPdf", finalPdfFile);
+        } else if (finalPdfFile.url) {
+          data.append("finalPdfUrl", finalPdfFile.url);
+        }
+      }
+
+      if (reportFile) {
+        if (reportFile instanceof File) {
+          data.append("reportFile", reportFile);
+        } else if (reportFile.url) {
+          data.append("reportUrl", reportFile.url);
+        }
+      }
+
+      if (posterFile && posterFile instanceof File) {
+        data.append("poster", posterFile);
+      }
+      
+      if (photoFiles && photoFiles.length > 0) {
+        photoFiles.forEach((photo) => {
+          if (photo instanceof File) {
+            data.append("photos", photo);
+          }
+        });
+      }
+
+      const response = await axios.put(
+        `http://localhost:3000/api/events/${activityId}/media`,
+        data,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      if (response.status === 200) {
+        alert("Activity, PDF, and media saved successfully!");
+        if (typeof fetchEvents === "function") {
+          fetchEvents();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to save activity card:", err);
+      alert(err.response?.data?.message || "Failed to save media.");
     }
-
-    if (typeof posterFile === "string") {
-      setPosterPreviewUrl(posterFile);
-      return;
-    }
-
-    const url = URL.createObjectURL(posterFile);
-    setPosterPreviewUrl(url);
-
-    return () => URL.revokeObjectURL(url);
-  }, [posterFile]);
+  };
 
   return (
-    <div className="border rounded-2xl p-5 mb-5 hover:shadow-lg transition bg-white">
+    <div className="border rounded-2xl p-5 mb-4 hover:shadow-md transition bg-white">
       {/* TITLE & STATUS */}
       <div className="flex justify-between items-start gap-4">
         <h3 className="text-xl font-bold text-gray-800">{formData.title}</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span
             className={`px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap ${
-              activity.status === "COMPLETED"
+              activity?.status === "COMPLETED"
                 ? "bg-green-100 text-green-700"
                 : "bg-orange-100 text-orange-700"
             }`}
           >
-            {activity.status}
+            {activity?.status || "UPCOMING"}
           </span>
-          {activity.status !== "COMPLETED" && (
+          {activity?.status !== "COMPLETED" && activityId && (
             <button
-              onClick={() => onMarkCompleted(activity.id)}
+              onClick={() => onMarkCompleted(activityId)}
               className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg font-bold"
             >
               Mark Completed
@@ -684,16 +827,28 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
 
       {/* FORM & MEDIA UPLOAD SECTION */}
       <div className="mt-6 border-t pt-6">
-        <h4 className="text-lg font-bold text-gray-800 mb-4">
-          📁 Event Report, Media & Metadata
-        </h4>
+        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+          <h4 className="text-lg font-bold text-gray-800">
+            📁 Event Report, Media & Metadata
+          </h4>
+          
+          {/* DELETE / CLEAR MEDIA BUTTON */}
+          <button
+            type="button"
+            onClick={handleDeleteAllMedia}
+            disabled={isDeletingMedia}
+            className="text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5"
+            title="Remove all uploaded files and media to start fresh"
+          >
+            <span>🗑️ {isDeletingMedia ? "Clearing..." : "Delete All Media"}</span>
+          </button>
+        </div>
         
         {/* FINAL PDF REPORT UPLOAD OPTION */}
         <div className="mb-5 p-4 bg-emerald-50/60 rounded-2xl border border-emerald-200">
           <label className="block text-sm font-bold text-emerald-900 mb-2">
             📄 Upload Final PDF Report (Signed / Compiled)
           </label>
-          
           <div className="flex items-center gap-3 flex-wrap">
             <label className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-xl cursor-pointer shadow-sm transition inline-flex items-center gap-2 text-sm">
               <span>Choose PDF</span>
@@ -705,10 +860,33 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
               />
             </label>
 
-            <span className="text-sm text-gray-700 font-medium truncate max-w-xs">
-              {finalPdfFile ? finalPdfFile.name : "No PDF chosen"}
-            </span>
-
+            {finalPdfFile ? (
+              <div className="flex items-center gap-2 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-sm">
+                <span className="text-sm text-gray-700 font-medium truncate max-w-[220px]">
+                  {finalPdfFile.name}
+                </span>
+                {finalPdfFile.url && (
+                  <a
+                    href={finalPdfFile.url.startsWith("http") ? finalPdfFile.url : `http://localhost:3000${finalPdfFile.url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-bold text-emerald-600 hover:underline ml-1"
+                  >
+                    View
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setFinalPdfFile(null)}
+                  className="text-xs font-bold text-red-500 hover:text-red-700 ml-1 bg-red-50 px-1.5 py-0.5 rounded-md"
+                  title="Remove PDF"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <span className="text-sm text-gray-500 font-medium">No PDF chosen</span>
+            )}
           </div>
         </div>
 
@@ -717,12 +895,39 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
           <label className="block text-sm font-bold text-indigo-900 mb-1">
             📝 Upload Report Document (.docx for Images)
           </label>
-          <input
-            type="file"
-            accept=".pdf,.docx"
-            onChange={handleReportUpload}
-            className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-indigo-600 file:text-white file:font-semibold hover:file:bg-indigo-700 cursor-pointer"
-          />
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              type="file"
+              accept=".pdf,.docx"
+              onChange={handleReportUpload}
+              className="text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-indigo-600 file:text-white file:font-semibold hover:file:bg-indigo-700 cursor-pointer"
+            />
+            {reportFile && reportFile.name && (
+              <div className="flex items-center gap-2 bg-white border border-indigo-200 px-3 py-1.5 rounded-xl shadow-sm">
+                <span className="text-sm text-gray-700 font-medium truncate max-w-[180px]">
+                  {reportFile.name}
+                </span>
+                {reportFile.url && (
+                  <a
+                    href={reportFile.url.startsWith("http") ? reportFile.url : `http://localhost:3000${reportFile.url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-bold text-indigo-600 hover:underline ml-1"
+                  >
+                    View
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setReportFile(null)}
+                  className="text-xs font-bold text-red-500 hover:text-red-700 ml-1 bg-red-50 px-1.5 py-0.5 rounded-md"
+                  title="Remove Report"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
           {isExtracting && (
             <p className="mt-2 text-xs text-indigo-700 font-semibold animate-pulse">
               ⚡ Processing document and extracting details...
@@ -751,8 +956,8 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
             </label>
             <input
               type="text"
-              value={formData.coordinator}
-              onChange={(e) => setFormData({ ...formData, coordinator: e.target.value })}
+              value={formData.facultyName}
+              onChange={(e) => setFormData({ ...formData, facultyName: e.target.value })}
               className="w-full border rounded-xl p-2.5 text-sm"
             />
           </div>
@@ -782,12 +987,8 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
           </div>
         </div>
 
-        
-
         {/* MEDIA FILES WITH EMBEDDED PREVIEWS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-          
-
           <div>
             <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
               Event Photos (Multiple Extracted Preview)
@@ -802,7 +1003,9 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
             {photoFiles.length > 0 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {photoFiles.map((photo, idx) => {
-                  const photoUrl = URL.createObjectURL(photo);
+                  const photoUrl = typeof photo === "string" 
+                    ? (photo.startsWith("http") ? photo : `http://localhost:3000${photo}`) 
+                    : URL.createObjectURL(photo);
                   return (
                     <div 
                       key={idx} 
@@ -856,5 +1059,4 @@ function ActivityMediaCard({ activity, uploading, onMarkCompleted, onUploadMedia
     </div>
   );
 }
-
 export default DepartmentCalendar;
