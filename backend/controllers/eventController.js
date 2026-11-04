@@ -1,13 +1,42 @@
-
 import Event from "../models/Event.js";
 import path from "path";
-import fs from "fs";
+import fs from 'fs/promises';
+import fsSync from 'fs';
 import crypto from "crypto";
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
 
 /*
 ============================================================
-UPLOAD DIRECTORY
+FIND EVENT SAFELY
+============================================================
+*/
+
+const findEventSafely = async (id, title, date) => {
+  if (id && id.match(/^[0-9a-fA-F]{24}$/)) {
+    let event = await Event.findById(id);
+    if (event) return event;
+  }
+  
+  if (title) {
+    let event = await Event.findOne({ title: { $regex: new RegExp(`^${title.trim()}$`, "i") } });
+    if (event) return event;
+
+    event = new Event({
+      title: title.trim(),
+      date: date ? new Date(date) : new Date(),
+      status: "Completed",
+      source: "CALENDAR"
+    });
+    await event.save();
+    return event;
+  }
+  
+  return null;
+};
+
+/*
+============================================================
+UPLOADS DIRECTORY
 ============================================================
 */
 
@@ -18,8 +47,8 @@ const getUploadsDirectory = () => {
     "events"
   );
 
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, {
+  if (!fsSync.existsSync(uploadsDir)) {
+    fsSync.mkdirSync(uploadsDir, {
       recursive: true,
     });
   }
@@ -89,7 +118,7 @@ const extractLinksFromPDF = async (pdfPath) => {
 
   try {
     const pdfData = new Uint8Array(
-      fs.readFileSync(pdfPath)
+      fsSync.readFileSync(pdfPath)
     );
 
     const pdf = await pdfjsLib
@@ -100,12 +129,6 @@ const extractLinksFromPDF = async (pdfPath) => {
 
     const allLinks = new Set();
 
-    /*
-    --------------------------------------------------------
-    PROCESS EVERY PDF PAGE
-    --------------------------------------------------------
-    */
-
     for (
       let pageNumber = 1;
       pageNumber <= pdf.numPages;
@@ -115,12 +138,6 @@ const extractLinksFromPDF = async (pdfPath) => {
         const page = await pdf.getPage(
           pageNumber
         );
-
-        /*
-        ------------------------------------------------------
-        1. EXTRACT LINKS FROM PDF ANNOTATIONS
-        ------------------------------------------------------
-        */
 
         const annotations =
           await page.getAnnotations();
@@ -135,11 +152,6 @@ const extractLinksFromPDF = async (pdfPath) => {
             );
           }
 
-          /*
-          Some PDFs store the URL inside a
-          URI action.
-          */
-
           if (
             annotation.action === "URI" &&
             annotation.url
@@ -149,12 +161,6 @@ const extractLinksFromPDF = async (pdfPath) => {
             );
           }
         }
-
-        /*
-        ------------------------------------------------------
-        2. EXTRACT PLAIN TEXT URLS
-        ------------------------------------------------------
-        */
 
         const textContent =
           await page.getTextContent();
@@ -166,13 +172,6 @@ const extractLinksFromPDF = async (pdfPath) => {
                 item.str || ""
             )
             .join(" ");
-
-        /*
-        Match URLs beginning with:
-        http://
-        https://
-        www.
-        */
 
         const urlRegex =
           /(?:https?:\/\/|www\.)[^\s<>"')]+/gi;
@@ -204,12 +203,6 @@ const extractLinksFromPDF = async (pdfPath) => {
       }
     }
 
-    /*
-    --------------------------------------------------------
-    CLASSIFY LINKS
-    --------------------------------------------------------
-    */
-
     for (const rawUrl of allLinks) {
       try {
         const url = new URL(rawUrl);
@@ -218,12 +211,6 @@ const extractLinksFromPDF = async (pdfPath) => {
           url.hostname
             .toLowerCase()
             .replace(/^www\./, "");
-
-        /*
-        ------------------------------------------------------
-        VIDEO PLATFORMS
-        ------------------------------------------------------
-        */
 
         const isVideo =
           hostname === "youtube.com" ||
@@ -237,15 +224,8 @@ const extractLinksFromPDF = async (pdfPath) => {
           result.videoLinks.push(
             url.href
           );
-
           continue;
         }
-
-        /*
-        ------------------------------------------------------
-        SOCIAL MEDIA
-        ------------------------------------------------------
-        */
 
         let platform = null;
 
@@ -287,12 +267,6 @@ const extractLinksFromPDF = async (pdfPath) => {
       }
     }
 
-    /*
-    --------------------------------------------------------
-    REMOVE DUPLICATES
-    --------------------------------------------------------
-    */
-
     result.videoLinks = [
       ...new Set(
         result.videoLinks
@@ -315,28 +289,6 @@ const extractLinksFromPDF = async (pdfPath) => {
     result.socialMediaLinks =
       [...socialMap.values()];
 
-    console.log(
-      "========================================"
-    );
-
-    console.log(
-      "PDF LINK EXTRACTION COMPLETE"
-    );
-
-    console.log(
-      "Video links:",
-      result.videoLinks
-    );
-
-    console.log(
-      "Social media links:",
-      result.socialMediaLinks
-    );
-
-    console.log(
-      "========================================"
-    );
-
     return result;
   } catch (error) {
     console.error(
@@ -351,11 +303,6 @@ const extractLinksFromPDF = async (pdfPath) => {
 /*
 ============================================================
 PDF.JS NODE CANVAS FACTORY
-
-PDF.js needs a canvas factory when rendering PDFs in Node.
-
-We explicitly use node-canvas instead of relying on PDF.js
-to discover the canvas package automatically.
 ============================================================
 */
 
@@ -406,19 +353,6 @@ class NodeCanvasFactory {
 /*
 ============================================================
 RENDER COMPLETE PDF PAGE
-
-IMPORTANT:
-
-We render the WHOLE page instead of extracting individual
-embedded images.
-
-This avoids problems with unresolved PDF image objects such
-as:
-
-Requesting object that isn't resolved yet
-Image or Canvas expected
-
-The complete rendered page is then sent to Gemini.
 ============================================================
 */
 
@@ -429,10 +363,6 @@ const renderPdfPageAsPng = async (
 ) => {
   const canvasFactory =
     new NodeCanvasFactory();
-
-  /*
-  Higher resolution helps Gemini read poster text.
-  */
 
   const scale = 2;
 
@@ -452,36 +382,19 @@ const renderPdfPageAsPng = async (
     context,
   } = canvasAndContext;
 
-  /*
-  White background.
-  */
-
   context.save();
-
   context.fillStyle = "#ffffff";
-
   context.fillRect(
     0,
     0,
     canvas.width,
     canvas.height
   );
-
   context.restore();
-
-  /*
-  Render PDF page.
-  */
 
   const renderContext = {
     canvasContext: context,
     viewport,
-
-    /*
-    Give PDF.js the same factory so that any
-    additional canvases it needs can be created.
-    */
-
     canvasFactory,
   };
 
@@ -490,10 +403,6 @@ const renderPdfPageAsPng = async (
       page.render(renderContext);
 
     await renderTask.promise;
-
-    /*
-    Convert rendered page to PNG.
-    */
 
     const buffer =
       canvas.toBuffer("image/png");
@@ -510,7 +419,7 @@ const renderPdfPageAsPng = async (
         filename
       );
 
-    fs.writeFileSync(
+    fsSync.writeFileSync(
       filePath,
       buffer
     );
@@ -531,18 +440,6 @@ const renderPdfPageAsPng = async (
 ============================================================
 GEMINI IMAGE CLASSIFICATION
 ============================================================
-
-Returns:
-
-poster
-event_photo
-other
-
-If Gemini fails, we return "unknown" rather than
-incorrectly treating the image as an event photo.
-
-This is VERY important.
-============================================================
 */
 
 const classifyImageWithGemini =
@@ -552,10 +449,6 @@ const classifyImageWithGemini =
         process.env.GEMINI_API_KEY;
 
       if (!apiKey) {
-        console.warn(
-          "GEMINI_API_KEY is not configured."
-        );
-
         return {
           classification: "unknown",
           hasFace: false,
@@ -564,13 +457,8 @@ const classifyImageWithGemini =
       }
 
       if (
-        !fs.existsSync(filePath)
+        !fsSync.existsSync(filePath)
       ) {
-        console.error(
-          "Image does not exist:",
-          filePath
-        );
-
         return {
           classification: "unknown",
           hasFace: false,
@@ -579,169 +467,24 @@ const classifyImageWithGemini =
       }
 
       const imageBuffer =
-        fs.readFileSync(filePath);
+        fsSync.readFileSync(filePath);
 
       const base64Image =
         imageBuffer.toString("base64");
 
       const prompt = `
-You are analyzing one complete page from a college
-event report PDF.
-
-Your job is to determine whether the page is:
-
+You are analyzing one complete page from a college event report PDF.
+Determine whether the page is:
 1. poster
 2. event_photo
 3. other
 
-Return ONLY valid JSON.
-
-Required format:
-
+Return ONLY valid JSON:
 {
   "classification": "poster",
   "hasFace": true,
   "faceCount": 1
 }
-
-classification MUST be exactly one of:
-
-"poster"
-"event_photo"
-"other"
-
-============================================================
-POSTER
-============================================================
-
-Use "poster" when the page is primarily an event
-announcement or promotional design.
-
-Examples:
-
-- Event poster
-- Workshop poster
-- Seminar poster
-- FDP poster
-- Conference poster
-- Hackathon poster
-- Invitation
-- Promotional event graphic
-
-A poster can contain photographs of people.
-
-The presence of a face DOES NOT make something an
-event_photo.
-
-Ask:
-
-"Was this designed to announce or promote the event?"
-
-If yes:
-
-poster
-
-============================================================
-EVENT PHOTO
-============================================================
-
-Use "event_photo" when the page/image is an actual
-photograph taken during the event.
-
-Examples:
-
-- Students attending an event
-- Audience
-- Speaker on stage
-- Faculty and students
-- Workshop activity
-- Group photograph
-- Certificate distribution
-- Award ceremony
-- Laboratory activity
-- Guest lecture photograph
-
-Ask:
-
-"Does this look like a real photograph taken during
-the event?"
-
-If yes:
-
-event_photo
-
-============================================================
-OTHER
-============================================================
-
-Use "other" for:
-
-- Feedback forms
-- Screenshots
-- Emails
-- WhatsApp screenshots
-- Website screenshots
-- Tables
-- Charts
-- Text-only pages
-- Attendance sheets
-- Certificates
-- Logos
-- Decorative graphics
-- Blank pages
-- Irrelevant documents
-- Anything that is neither a poster nor an event photo
-
-============================================================
-FACE DETECTION
-============================================================
-
-hasFace:
-
-true if clearly visible human faces exist.
-
-false if there are no visible human faces.
-
-faceCount:
-
-Approximate number of clearly visible human faces.
-
-Do not count:
-
-- Cartoon faces
-- Logos
-- Drawings
-- Extremely tiny/unrecognizable faces
-
-If a poster contains a photograph of a person's face,
-that DOES count as a face.
-
-IMPORTANT:
-
-Face detection does NOT determine classification.
-
-A poster containing faces is still:
-
-"poster"
-
-============================================================
-PRIMARY PURPOSE RULE
-============================================================
-
-Ask:
-
-"What is the PRIMARY PURPOSE of this page?"
-
-Designed to announce/promote an event:
-poster
-
-Actual photograph taken during an event:
-event_photo
-
-Everything else:
-other
-
-Return ONLY JSON.
 `;
 
       const url =
@@ -750,12 +493,10 @@ Return ONLY JSON.
       const response =
         await fetch(url, {
           method: "POST",
-
           headers: {
             "Content-Type":
               "application/json",
           },
-
           body: JSON.stringify({
             contents: [
               {
@@ -763,12 +504,10 @@ Return ONLY JSON.
                   {
                     text: prompt,
                   },
-
                   {
                     inline_data: {
                       mime_type:
                         "image/png",
-
                       data:
                         base64Image,
                     },
@@ -776,31 +515,15 @@ Return ONLY JSON.
                 ],
               },
             ],
-
             generationConfig: {
               temperature: 0,
-
               responseMimeType:
                 "application/json",
             },
           }),
         });
 
-      /*
-      --------------------------------------------------------
-      GEMINI HTTP ERROR
-      --------------------------------------------------------
-      */
-
       if (!response.ok) {
-        const errorText =
-          await response.text();
-
-        console.error(
-          "Gemini classification failed:",
-          errorText
-        );
-
         return {
           classification: "unknown",
           hasFace: false,
@@ -818,22 +541,12 @@ Return ONLY JSON.
           ?.trim();
 
       if (!result) {
-        console.error(
-          "Gemini returned empty response."
-        );
-
         return {
           classification: "unknown",
           hasFace: false,
           faceCount: 0,
         };
       }
-
-      /*
-      --------------------------------------------------------
-      REMOVE MARKDOWN CODE FENCES
-      --------------------------------------------------------
-      */
 
       result = result
         .replace(
@@ -850,35 +563,18 @@ Return ONLY JSON.
         )
         .trim();
 
-      /*
-      --------------------------------------------------------
-      PARSE JSON
-      --------------------------------------------------------
-      */
-
       let parsed;
 
       try {
         parsed =
           JSON.parse(result);
       } catch (error) {
-        console.error(
-          "Could not parse Gemini JSON:",
-          result
-        );
-
         return {
           classification: "unknown",
           hasFace: false,
           faceCount: 0,
         };
       }
-
-      /*
-      --------------------------------------------------------
-      VALIDATE CLASSIFICATION
-      --------------------------------------------------------
-      */
 
       let classification =
         String(
@@ -900,12 +596,6 @@ Return ONLY JSON.
         classification =
           "unknown";
       }
-
-      /*
-      --------------------------------------------------------
-      FACE INFORMATION
-      --------------------------------------------------------
-      */
 
       const hasFace =
         Boolean(
@@ -935,30 +625,12 @@ Return ONLY JSON.
         faceCount = 0;
       }
 
-      console.log(
-        "Gemini result:",
-        {
-          classification,
-          hasFace,
-          faceCount,
-        }
-      );
-
       return {
         classification,
         hasFace,
         faceCount,
       };
     } catch (error) {
-      console.error(
-        "Gemini image classification error:",
-        error.message
-      );
-
-      /*
-      NEVER classify an API failure as event_photo.
-      */
-
       return {
         classification: "unknown",
         hasFace: false,
@@ -986,19 +658,13 @@ const processAndClassifyImage =
     try {
       if (
         !filePath ||
-        !fs.existsSync(filePath)
+        !fsSync.existsSync(filePath)
       ) {
         return;
       }
 
-      /*
-      --------------------------------------------------------
-      HASH IMAGE
-      --------------------------------------------------------
-      */
-
       const imageBuffer =
-        fs.readFileSync(
+        fsSync.readFileSync(
           filePath
         );
 
@@ -1007,21 +673,11 @@ const processAndClassifyImage =
           imageBuffer
         );
 
-      /*
-      --------------------------------------------------------
-      DUPLICATE CHECK
-      --------------------------------------------------------
-      */
-
       if (
         seenHashes.has(hash)
       ) {
-        console.log(
-          `Duplicate rendered page skipped: ${pageNumber}`
-        );
-
         try {
-          fs.unlinkSync(
+          fsSync.unlinkSync(
             filePath
           );
         } catch {}
@@ -1031,55 +687,15 @@ const processAndClassifyImage =
 
       seenHashes.add(hash);
 
-      console.log(
-        "--------------------------------------------------"
-      );
-
-      console.log(
-        `Classifying rendered PDF page ${pageNumber}`
-      );
-
-      console.log(
-        `Image: ${filePath}`
-      );
-
-      /*
-      --------------------------------------------------------
-      GEMINI
-      --------------------------------------------------------
-      */
-
       const result =
         await classifyImageWithGemini(
           filePath
         );
 
-      console.log(
-        `Classification: ${result.classification}`
-      );
-
-      console.log(
-        `Has face: ${result.hasFace}`
-      );
-
-      console.log(
-        `Face count: ${result.faceCount}`
-      );
-
-      /*
-      --------------------------------------------------------
-      GEMINI FAILURE
-      --------------------------------------------------------
-      */
-
       if (
         result.classification ===
         "unknown"
       ) {
-        console.log(
-          `Gemini could not classify page ${pageNumber}. Keeping file for debugging.`
-        );
-
         return;
       }
 
@@ -1091,12 +707,6 @@ const processAndClassifyImage =
       const url =
         `/uploads/events/${filename}`;
 
-      /*
-      --------------------------------------------------------
-      POSTER
-      --------------------------------------------------------
-      */
-
       if (
         result.classification ===
         "poster"
@@ -1106,34 +716,15 @@ const processAndClassifyImage =
         ) {
           posterHolder.url =
             url;
-
           posterHolder.filePath =
             filePath;
-
           posterHolder.width =
             width || 0;
-
           posterHolder.height =
             height || 0;
-
-          console.log(
-            "POSTER FOUND:",
-            url
-          );
-        } else {
-          console.log(
-            "Additional poster detected. Ignoring it."
-          );
         }
-
         return;
       }
-
-      /*
-      --------------------------------------------------------
-      EVENT PHOTO
-      --------------------------------------------------------
-      */
 
       if (
         result.classification ===
@@ -1142,40 +733,18 @@ const processAndClassifyImage =
         extractedPhotos.push({
           page:
             pageNumber,
-
           url,
-
           width:
             width || 0,
-
           height:
             height || 0,
-
           hasFace:
             result.hasFace,
-
           faceCount:
             result.faceCount,
         });
-
-        console.log(
-          "EVENT PHOTO FOUND:",
-          url
-        );
-
         return;
       }
-
-      /*
-      --------------------------------------------------------
-      OTHER
-      --------------------------------------------------------
-      */
-
-      console.log(
-        `Page ${pageNumber} classified as OTHER. Ignoring.`
-      );
-
     } catch (error) {
       console.error(
         `Could not process page ${pageNumber}:`,
@@ -1187,25 +756,6 @@ const processAndClassifyImage =
 /*
 ============================================================
 EXTRACT MEDIA FROM PDF
-
-NEW PIPELINE:
-
-PDF
- ↓
-PDF page
- ↓
-Render complete page
- ↓
-Hash
- ↓
-Gemini
- ↓
-poster / event_photo / other
- ↓
-Database
-
-We intentionally DO NOT extract PDF internal image
-XObjects anymore.
 ============================================================
 */
 
@@ -1216,43 +766,22 @@ const extractImagesFromPDF =
   ) => {
     const pdfData =
       new Uint8Array(
-        fs.readFileSync(
+        fsSync.readFileSync(
           pdfPath
         )
       );
 
-    /*
-    --------------------------------------------------------
-    CANVAS FACTORY
-    --------------------------------------------------------
-    */
-
     const canvasFactory =
       new NodeCanvasFactory();
-
-    /*
-    --------------------------------------------------------
-    LOAD PDF
-    --------------------------------------------------------
-    */
 
     const loadingTask =
       pdfjsLib.getDocument({
         data: pdfData,
-
-        /*
-        Explicitly tell PDF.js which canvas factory to use.
-        */
-
         canvasFactory,
       });
 
     const pdf =
       await loadingTask.promise;
-
-    console.log(
-      `PDF loaded successfully. Pages: ${pdf.numPages}`
-    );
 
     const extractedPhotos =
       [];
@@ -1267,39 +796,15 @@ const extractImagesFromPDF =
     const seenHashes =
       new Set();
 
-    /*
-    --------------------------------------------------------
-    PROCESS ONE PAGE
-    --------------------------------------------------------
-    */
-
     const processPage =
       async (pageNumber) => {
         let page = null;
 
         try {
-          console.log(
-            "=================================================="
-          );
-
-          console.log(
-            `Processing PDF page ${pageNumber}/${pdf.numPages}`
-          );
-
-          console.log(
-            "=================================================="
-          );
-
           page =
             await pdf.getPage(
               pageNumber
             );
-
-          /*
-          --------------------------------------------------
-          RENDER COMPLETE PAGE
-          --------------------------------------------------
-          */
 
           const rendered =
             await renderPdfPageAsPng(
@@ -1308,32 +813,16 @@ const extractImagesFromPDF =
               pageNumber
             );
 
-          console.log(
-            `Rendered page ${pageNumber}: ${rendered.filePath}`
-          );
-
-          /*
-          --------------------------------------------------
-          CLASSIFY COMPLETE PAGE
-          --------------------------------------------------
-          */
-
           await processAndClassifyImage({
             filePath:
               rendered.filePath,
-
             pageNumber,
-
             width:
               rendered.width,
-
             height:
               rendered.height,
-
             seenHashes,
-
             extractedPhotos,
-
             posterHolder,
           });
 
@@ -1342,15 +831,7 @@ const extractImagesFromPDF =
             `Could not process PDF page ${pageNumber}:`,
             error.message
           );
-
-          console.error(
-            error.stack
-          );
         } finally {
-          /*
-          PDF.js page cleanup.
-          */
-
           if (page) {
             try {
               page.cleanup();
@@ -1358,19 +839,6 @@ const extractImagesFromPDF =
           }
         }
       };
-
-    /*
-    --------------------------------------------------------
-    PROCESS ALL PAGES SEQUENTIALLY
-    --------------------------------------------------------
-
-    Sequential processing is intentional.
-
-    Gemini requests are already expensive and sequential
-    processing prevents multiple pages from competing for
-    resources at the same time.
-    --------------------------------------------------------
-    */
 
     for (
       let pageNumber = 1;
@@ -1382,12 +850,6 @@ const extractImagesFromPDF =
       );
     }
 
-    /*
-    --------------------------------------------------------
-    CLEANUP PDF
-    --------------------------------------------------------
-    */
-
     try {
       await pdf.cleanup();
     } catch {}
@@ -1396,30 +858,9 @@ const extractImagesFromPDF =
       await pdf.destroy();
     } catch {}
 
-    console.log(
-      "=================================================="
-    );
-
-    console.log(
-      "PDF EXTRACTION COMPLETE"
-    );
-
-    console.log(
-      `Event photos found: ${extractedPhotos.length}`
-    );
-
-    console.log(
-      `Poster found: ${Boolean(posterHolder.url)}`
-    );
-
-    console.log(
-      "=================================================="
-    );
-
     return {
       renderedPhotos:
         extractedPhotos,
-
       poster:
         posterHolder.url,
     };
@@ -1456,7 +897,6 @@ export const getEvents =
         .json({
           message:
             "Failed to fetch events",
-
           error:
             error.message,
         });
@@ -1505,7 +945,6 @@ export const getEventById =
         .json({
           message:
             "Failed to fetch event",
-
           error:
             error.message,
         });
@@ -1560,78 +999,59 @@ export const createEvent =
         new Event({
           title:
             title.trim(),
-
           department:
             department ||
             "N/A",
-
           date:
             new Date(date),
-
           time:
             time ||
             "10:00 AM",
-
           venue:
             venue ||
             "TBD",
-
           facultyName:
             facultyName ||
             "Unknown",
-
           facultyEmail:
             facultyEmail ||
             "",
-
           activityType:
             activityType ||
             "IIC",
-
           category:
             category ||
             "Workshop",
-
           level:
             level ||
             "",
-
           isCelebration:
             Boolean(
               isCelebration
             ),
-
           message:
             message || "",
-
           status:
             status ||
             "UPCOMING",
-
           reportLink:
             reportLink || "",
-
           posterLink:
             posterLink || "",
-
           videoLink:
             videoLink || "",
-
           photos:
             Array.isArray(
               photos
             )
               ? photos
               : [],
-
           collegePhoto:
             collegePhoto ||
             "",
-
           eventPhoto:
             eventPhoto ||
             "",
-
           source:
             source ||
             "CALENDAR",
@@ -1644,7 +1064,6 @@ export const createEvent =
         .json({
           message:
             "Event created successfully!",
-
           event,
         });
 
@@ -1659,18 +1078,11 @@ export const createEvent =
         .json({
           message:
             "Failed to create event",
-
           error:
             error.message,
         });
     }
   };
-
-/*
-============================================================
-UPDATE EVENT
-============================================================
-*/
 
 /*
 ============================================================
@@ -1681,13 +1093,11 @@ UPDATE EVENT (INCLUDING MEDIA & PHOTOS)
 export const updateEvent = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const event = await Event.findById(id);
+    const event = await findEventSafely(id, req.body.title, req.body.date);
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
     }
 
-    // 1. Handle regular text/form fields update
     const allowedFields = [
       "title",
       "department",
@@ -1713,7 +1123,6 @@ export const updateEvent = async (req, res) => {
       }
     });
 
-    // 2. Handle uploaded photos persistence (e.g. from frontend previews / docx extractions)
     const uploadsDir = getUploadsDirectory();
     
     if (req.files && req.files.photos) {
@@ -1721,13 +1130,11 @@ export const updateEvent = async (req, res) => {
       const savedPhotos = [];
 
       for (const photo of photoArray) {
-        // If the photo is already a URL string sent from frontend state, keep it
         if (typeof photo === "string" && photo.startsWith("http")) {
           savedPhotos.push(photo);
           continue;
         }
 
-        // If it's a new file upload object, save it locally to disk
         if (photo.name && photo.mv) {
           const filename = createFilename(`photo_${event._id}`, path.extname(photo.name));
           const filePath = path.join(uploadsDir, filename);
@@ -1738,13 +1145,11 @@ export const updateEvent = async (req, res) => {
         }
       }
 
-      // Merge or update the photos array in MongoDB
       if (savedPhotos.length > 0) {
         event.photos = [...(event.photos || []), ...savedPhotos];
       }
     }
 
-    // Also support if photos are passed as a JSON array string or array of URLs in req.body
     if (req.body.photos) {
       let parsedPhotos = [];
       try {
@@ -1754,7 +1159,6 @@ export const updateEvent = async (req, res) => {
       }
       
       if (Array.isArray(parsedPhotos)) {
-        // Combine unique URLs
         const combined = new Set([...(event.photos || []), ...parsedPhotos]);
         event.photos = Array.from(combined);
       }
@@ -1780,35 +1184,16 @@ export const updateEvent = async (req, res) => {
 ============================================================
 UPDATE EVENT MEDIA
 ============================================================
-
-Accepts:
-
-report
-videoLink
-posterLink
-
-The PDF is processed automatically.
-
-The backend extracts:
-
-poster
-event photos
-face information
-============================================================
 */
 
 export const updateEventMedia = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const event = await Event.findById(id);
+    const event = await findEventSafely(id, req.body.title, req.body.date);
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
     }
 
-    /* ========================================================
-       UPDATE TEXT METADATA & SPEAKER DETAILS
-    ======================================================== */
     if (req.body.venue !== undefined) {
       event.venue = String(req.body.venue).trim();
     }
@@ -1834,15 +1219,11 @@ export const updateEventMedia = async (req, res) => {
     const uploadsDir = getUploadsDirectory();
     const baseUrl = getServerBaseUrl(req);
 
-    /* ========================================================
-       HANDLE FILES (Report, Final PDF, Poster, Photos)
-    ======================================================== */
     const reportFile = req.files?.report;
     const finalPdfFile = req.files?.finalPdf;
     const posterFile = req.files?.poster;
-    const photoFiles = req.files?.photos; // Can be a single file object or an array of files
+    const photoFiles = req.files?.photos;
 
-    // 1. Handle Report File (.pdf or .docx)
     if (reportFile) {
       const extension = path.extname(reportFile.name).toLowerCase();
       if (extension !== ".pdf" && extension !== ".docx") {
@@ -1856,7 +1237,6 @@ export const updateEventMedia = async (req, res) => {
       event.reportLink = `${baseUrl}/uploads/events/${filename}`;
       event.source = "REPORT";
 
-      // PDF Extractions if applicable
       if (extension === ".pdf") {
         try {
           const extractedLinks = await extractLinksFromPDF(filePath);
@@ -1883,7 +1263,6 @@ export const updateEventMedia = async (req, res) => {
       }
     }
 
-    // 2. Handle Final PDF Report
     if (finalPdfFile) {
       const filename = createFilename(`final_report_${event._id}`, ".pdf");
       const filePath = path.join(uploadsDir, filename);
@@ -1891,7 +1270,6 @@ export const updateEventMedia = async (req, res) => {
       event.reportLink = `${baseUrl}/uploads/events/${filename}`;
     }
 
-    // 3. Handle Manual Poster Upload
     if (posterFile) {
       const extension = path.extname(posterFile.name).toLowerCase();
       const filename = createFilename(`poster_${event._id}`, extension);
@@ -1900,7 +1278,6 @@ export const updateEventMedia = async (req, res) => {
       event.posterLink = `${baseUrl}/uploads/events/${filename}`;
     }
 
-    // 4. Handle Event Photos (supports single file or multiple files array)
     if (photoFiles) {
       const photosArray = Array.isArray(photoFiles) ? photoFiles : [photoFiles];
       const savedPhotoUrls = [];
@@ -1914,13 +1291,9 @@ export const updateEventMedia = async (req, res) => {
         savedPhotoUrls.push(`${baseUrl}/uploads/events/${filename}`);
       }
 
-      // Append or replace photos safely
       event.photos = [...(event.photos || []), ...savedPhotoUrls];
     }
 
-    /* ========================================================
-       SAVE CHANGES TO DATABASE
-    ======================================================== */
     await event.save();
 
     res.status(200).json({
@@ -1936,55 +1309,35 @@ export const updateEventMedia = async (req, res) => {
     });
   }
 };
+
 /*
 ============================================================
 DELETE EVENT
 ============================================================
 */
 
-export const deleteEvent =
-  async (req, res) => {
-    try {
-      const {
-        id,
-      } = req.params;
+export const deleteEvent = async (req, res) => {
+  try {
+    const { id } = req.params;
 
-      const event =
-        await Event.findByIdAndDelete(
-          id
-        );
+    const event = await Event.findByIdAndDelete(id);
 
-      if (!event) {
-        return res
-          .status(404)
-          .json({
-            message:
-              "Event not found",
-          });
-      }
-
-      res
-        .status(200)
-        .json({
-          message:
-            "Event deleted successfully!",
-        });
-
-    } catch (error) {
-      console.error(
-        "deleteEvent Error:",
-        error
-      );
-
-      res
-        .status(500)
-        .json({
-          message:
-            "Failed to delete event",
-
-          error:
-            error.message,
-        });
+    if (!event) {
+      return res.status(404).json({
+        message: "Event not found",
+      });
     }
-  };
 
+    res.status(200).json({
+      message: "Event deleted successfully!",
+    });
+
+  } catch (error) {
+    console.error("deleteEvent Error:", error);
+
+    res.status(500).json({
+      message: "Failed to delete event",
+      error: error.message,
+    });
+  }
+}; 

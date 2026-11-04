@@ -1,5 +1,8 @@
 import dotenv from "dotenv";
 dotenv.config(); 
+import { spawn } from "child_process";
+import fs from "fs";
+import path from "path";
 import express from "express";
 import cors from "cors";
 import connectDB from "./config/db.js";
@@ -10,8 +13,6 @@ import memberRoutes from "./routes/memberRoutes.js";
 import fileUpload from 'express-fileupload';
 import startScheduler from "./utils/scheduler.js";
 import { seedCSVData } from "./utils/csvSeeder.js";
-import path from "path";
-import multer from "multer";
 import mammoth from "mammoth";
 import { GoogleGenAI } from "@google/genai";
 
@@ -22,7 +23,10 @@ connectDB().then(() => {
 const app = express();
 app.use(cors({ origin: "http://localhost:5173" }));
 app.use(express.json());
-
+app.use(fileUpload({
+    createParentPath: true,
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max file size limit
+}));
 // Skip express-fileupload for /api/reports so multer can handle Word document text and image extraction
 app.use((req, res, next) => {
   if (req.path.startsWith("/api/reports")) {
@@ -31,23 +35,27 @@ app.use((req, res, next) => {
   return fileUpload()(req, res, next);
 });
 
-const upload = multer({ storage: multer.memoryStorage() });
+
 
 // Initialize Google Gen AI client safely with the API key
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Combined Word Document Handler (Extracts text using Gemini & images using Mammoth)
-app.post("/api/reports/extract-doc-media", upload.single("docFile"), async (req, res) => {
+app.post("/api/reports/extract-doc-media", async (req, res) => {
   try {
-    if (!req.file) {
+    // Use express-fileupload syntax for req.files instead of multer's req.file
+    const docFile = req.files?.docFile || req.files?.report;
+
+    if (!docFile || !docFile.data) {
       return res.status(400).json({ error: "No document file uploaded." });
     }
 
+    const fileBuffer = docFile.data;
     const extractedImages = [];
 
     // 1. Extract embedded media/images correctly using Mammoth base64 reader
     await mammoth.convertToHtml(
-      { buffer: req.file.buffer },
+      { buffer: fileBuffer },
       {
         convertImage: mammoth.images.inline((element) => {
           return element.read("base64").then((imageBuffer) => {
@@ -63,7 +71,7 @@ app.post("/api/reports/extract-doc-media", upload.single("docFile"), async (req,
     );
 
     // 2. Extract raw text from Word document buffer
-    const textResult = await mammoth.extractRawText({ buffer: req.file.buffer });
+    const textResult = await mammoth.extractRawText({ buffer: fileBuffer });
     const rawText = textResult.value || "";
 
     // 3. Intelligent Field Extraction using Gemini AI
@@ -129,13 +137,6 @@ ${rawText.substring(0, 4000)}`,
     res.status(500).json({ error: "Failed to process Word document." });
   }
 });
-
-app.use(
-  "/uploads",
-  express.static(
-    path.join(process.cwd(), "uploads")
-  )
-);
 
 // Routes
 app.use("/api/auth", authRoutes);
